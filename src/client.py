@@ -22,7 +22,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=256)
 parser.add_argument('--total_epochs', type=int, default=1)
 parser.add_argument('--step_size', type=int, default=70)
-parser.add_argument('--round', type=int, default=1)
 parser.add_argument('--client_index', type=int, default=0)
 parser.add_argument('--num_clients', type=int)
 args = parser.parse_args()
@@ -31,6 +30,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+#TODO: Change training data split to be iid.
 def get_dataloader():
     trainset = CIFAR10('./data', train=True, transform=transforms.Compose([
             transforms.RandomCrop(32, padding=4),
@@ -63,16 +63,6 @@ def train_model(model, train_loader):
             optimizer.step()
         scheduler.step()
 
-# def train(net, trainloader, epochs):
-#     """Train the model on the training set."""
-#     criterion = torch.nn.CrossEntropyLoss()
-#     optimizer = torch.optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
-#     for _ in range(epochs):
-#         for images, labels in tqdm(trainloader):
-#             optimizer.zero_grad()
-#             criterion(net(images.to(DEVICE)), labels.to(DEVICE)).backward()
-#             optimizer.step()
-
 def eval(model, test_loader):
     correct = 0
     total = 0
@@ -91,25 +81,7 @@ def eval(model, test_loader):
             total += len(target)
     return loss/len(testloader.dataset), correct / total
 
-# def test(net, testloader):
-#     """Validate the model on the test set."""
-#     criterion = torch.nn.CrossEntropyLoss()
-#     correct, total, loss = 0, 0, 0.0
-#     with torch.no_grad():
-#         for images, labels in tqdm(testloader):
-#             outputs = net(images.to(DEVICE))
-#             labels = labels.to(DEVICE)
-#             loss += criterion(outputs, labels).item()
-#             total += labels.size(0)
-#             correct += (torch.max(outputs.data, 1)[1] == labels).sum().item()
-#     return loss / len(testloader.dataset), correct / total
-
-
-# #############################################################################
-# 2. Federation of the pipeline with Flower
-# #############################################################################
-
-# Load model and data (simple CNN, CIFAR-10)
+# Load model and data (Resnet18, CIFAR-10)
 net = ResNet18(num_classes=10)
 
 trainloader, testloader = get_dataloader()
