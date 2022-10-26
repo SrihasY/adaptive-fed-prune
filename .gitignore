@@ -1,0 +1,4 @@
+sysmlvenv/
+src/__pycache__
+.vscode
+data/
