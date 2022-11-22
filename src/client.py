@@ -10,6 +10,7 @@ from torchvision.datasets import CIFAR10
 from torchvision import transforms
 from tqdm import tqdm
 from cifar_resnet import ResNet18
+from prune import prune_model
 import cifar_resnet as resnet
 
 import argparse
@@ -82,8 +83,8 @@ def eval(model, test_loader):
     return loss/len(testloader.dataset), correct / total
 
 # Load model and data (Resnet18, CIFAR-10)
-net = ResNet18(num_classes=10)
-
+prev_net = ResNet18(num_classes=10)
+net, pruned_filter_indexes = prune_model(prev_net)
 trainloader, testloader = get_dataloader()
 
 # Define Flower client
@@ -99,7 +100,8 @@ class FlowerClient(fl.client.NumPyClient):
     def fit(self, parameters, config):
         self.set_parameters(parameters)
         train_model(net, trainloader)
-        return self.get_parameters(config={}), len(trainloader.dataset), {}
+        pruned_index_dict = {"pruned_indexes": pruned_filter_indexes}
+        return self.get_parameters(config={}), len(trainloader.dataset), pruned_index_dict
 
     def evaluate(self, parameters, config):
         self.set_parameters(parameters)
