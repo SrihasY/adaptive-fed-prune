@@ -10,7 +10,7 @@ from torchvision.datasets import CIFAR10
 from torchvision import transforms
 from tqdm import tqdm
 from cifar_resnet import ResNet18
-from prune import prune_model
+from prune import prune_model, prune_model_with_indices
 import cifar_resnet as resnet
 
 import argparse
@@ -84,8 +84,9 @@ def eval(model, test_loader):
 
 # Load model and data (Resnet18, CIFAR-10)
 central_net = ResNet18(num_classes=10)
-net, pruned_filter_indexes = prune_model(central_net)
+net = central_net
 trainloader, testloader = get_dataloader()
+network_parameter = 1 # to be used for scaling in the array
 
 # Define Flower client
 class FlowerClient(fl.client.NumPyClient):
@@ -93,21 +94,25 @@ class FlowerClient(fl.client.NumPyClient):
         return [val.cpu().numpy() for _, val in net.state_dict().items()]
 
     def set_parameters(self, parameters):
-        params_dict = zip(net.state_dict().keys(), parameters)
+        params_dict = zip(central_net.state_dict().keys(), parameters)
         state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
-        net.load_state_dict(state_dict, strict=True)
+        central_net.load_state_dict(state_dict, strict=True)
 
     def fit(self, parameters, config):
         server_prune_ids = config['server_prune_ids']
-        prune_model(central_net, server_prune_ids)
+        prune_model_with_indices(central_net, server_prune_ids)
         self.set_parameters(parameters)
+        net = central_net
         train_model(net, trainloader)
+        pruned_filter_indexes = prune_model(net)
         pruned_index_dict = {"pruned_indexes": pruned_filter_indexes}
         return self.get_parameters(config={}), len(trainloader.dataset), pruned_index_dict
 
     def evaluate(self, parameters, config):
+        server_prune_ids = config['server_prune_ids']
+        prune_model_with_indices(central_net, server_prune_ids)
         self.set_parameters(parameters)
-        loss, accuracy = eval(net, testloader)
+        loss, accuracy = eval(central_net, testloader)
         return loss, len(testloader.dataset), {"accuracy": accuracy}
 
 

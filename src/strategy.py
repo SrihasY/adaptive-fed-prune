@@ -3,7 +3,7 @@ import flwr
 from logging import WARNING
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
-from flwr.server.strategy.strategy import Strategy
+from flwr.server.strategy import FedAvg
 
 from flwr.server.client_manager import ClientManager
 from flwr.server.client_proxy import ClientProxy
@@ -21,17 +21,17 @@ from flwr.common import (
     parameters_to_ndarrays,
 )
 
-class Struct_Prune_Aggregation(Strategy):
-    def initialize_parameters(
-        self, client_manager: ClientManager
-    ) -> Optional[Parameters]:
-        initial_parameters = self.initial_parameters
-        self.initial_parameters = None  # Don't keep initial parameters in memory
-        return initial_parameters
+class Struct_Prune_Aggregation(FedAvg):
+
+    def __init__ (self, ):
+        super(Struct_Prune_Aggregation, self).__init__()
+        self.central_parameters = self.initial_parameters
 
     def configure_fit(
         self, server_round: int, parameters: Parameters, client_manager: ClientManager
     ) -> List[Tuple[ClientProxy, FitIns]]:
+        """Configure the next round of training."""
+        self.central_parameters = parameters
         config = {}
         if self.on_fit_config_fn is not None:
             # Custom fit config function provided
@@ -49,14 +49,36 @@ class Struct_Prune_Aggregation(Strategy):
         # Return client/config pairs
         return [(client, fit_ins) for client in clients]
 
-    def aggregate_fit(self, server_round, results, failures):
-        # Your implementation here
+    def aggregate_fit(
+        self,
+        server_round: int,
+        results: List[Tuple[ClientProxy, FitRes]],
+        failures: List[Union[Tuple[ClientProxy, FitRes], BaseException]],
+    ) -> Tuple[Optional[Parameters], Dict[str, Scalar]]:
+        """Aggregate fit results using weighted average."""
+        if not results:
+            return None, {}
+        # Do not aggregate if there are failures and failures are not accepted
+        if not self.accept_failures and failures:
+            return None, {}
 
-    def configure_evaluate(self, server_round, parameters, client_manager):
-        # Your implementation here
+        # Convert results
+        weights_results = [
+            (parameters_to_ndarrays(fit_res.parameters), fit_res.num_examples)
+            for _, fit_res in results
+        ]
+        parameters_aggregated = ndarrays_to_parameters(aggregate(weights_results))
 
-    def aggregate_evaluate(self, server_round, results, failures):
-        # Your implementation here``
+        # Aggregate custom metrics if aggregation fn was provided
+        metrics_aggregated = {}
+        if self.fit_metrics_aggregation_fn:
+            fit_metrics = [(res.num_examples, res.metrics) for _, res in results]
+            metrics_aggregated = self.fit_metrics_aggregation_fn(fit_metrics)
+        elif server_round == 1:  # Only log this warning once
+            log(WARNING, "No fit_metrics_aggregation_fn provided")
 
-    def evaluate(self, parameters):
-        # Your implementation here
+        return parameters_aggregated, metrics_aggregated
+
+    # Might need for client personalized model evaluation.
+    # def aggregate_evaluate(self, server_round, results, failures):
+    #     # Your implementation here``

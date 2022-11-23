@@ -1,7 +1,10 @@
-from typing import List, Tuple
+from typing import List, Tuple, Callable, Dict
 
 import flwr as fl
 from flwr.common import Metrics
+
+from src.strategy import Struct_Prune_Aggregation
+
 
 server_pruned_ids = []
 
@@ -24,13 +27,24 @@ def get_on_fit_config_fn() -> Callable[[int], Dict[str, str]]:
 
     return fit_config
 
+def get_on_evaluate_config_fn() -> Callable[[int], Dict[str, str]]:
+    """Return a function which returns training configurations."""
+
+    def evaluate_config(server_round: int) -> Dict[str, str]:
+        """Return a configuration with static batch size and (local) epochs."""
+        config = {server_pruned_ids: server_pruned_ids}
+        return config
+
+    return evaluate_config
+
 # Define strategy
-strategy = fl.server.strategy.FedAvg(evaluate_metrics_aggregation_fn=weighted_average)
+strategy = Struct_Prune_Aggregation(evaluate_metrics_aggregation_fn=weighted_average)
 
 # Start Flower server
 fl.server.start_server(
     server_address="127.0.0.1:8080",
     config=fl.server.ServerConfig(num_rounds=3),
-    on_fit_config_fn = get_on_fit_config_fn,
+    on_fit_config_fn = get_on_fit_config_fn(),
+    get_on_evaluate_config_fn = get_on_evaluate_config_fn(),
     strategy=strategy,
 )
