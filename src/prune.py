@@ -86,24 +86,32 @@ def train_model(model, train_loader, test_loader):
     print("Best Acc=%.4f" % (best_acc))
 
 
-def prune_model(model):
+def prune_model(model, indices=[]):
     model.cpu()
     DG = tp.DependencyGraph().build_dependency(model, torch.randn(1, 3, 32, 32))
     final_prune_indexes = []
 
-    def prune_conv(conv, amount=0.2):
-        strategy = tp.strategy.L1Strategy()
-        pruning_index = strategy(conv.weight, amount=amount)
-        final_prune_indexes.append(pruning_index)
-        plan = DG.get_pruning_plan(conv, tp.prune_conv_out_channel, pruning_index)
+    def prune_conv(conv, amount=0.2, ids = []):
+        if not ids:
+            strategy = tp.strategy.L1Strategy()
+            ids = strategy(conv.weight, amount=amount)
+        final_prune_indexes.append(indices)
+        plan = DG.get_pruning_plan(conv, tp.prune_conv_out_channel, ids)
         plan.exec()
 
     block_prune_probs = [0.1, 0.1, 0.2, 0.2, 0.2, 0.2, 0.3, 0.3]
     blk_id = 0
+    i = 0
     for m in model.modules():
         if isinstance(m, resnet.BasicBlock):
-            prune_conv(m.conv1, block_prune_probs[blk_id])
-            prune_conv(m.conv2, block_prune_probs[blk_id])
+            if not indices:
+                prune_conv(m.conv1, block_prune_probs[blk_id])
+                prune_conv(m.conv2, block_prune_probs[blk_id])
+            else:
+                prune_conv(m.conv1, block_prune_probs[blk_id], indices[i])
+                i = i + 1
+                prune_conv(m.conv2, block_prune_probs[blk_id], indices[i])
+                i = i + 1
             blk_id += 1
     return model, final_prune_indexes
 

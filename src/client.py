@@ -83,8 +83,8 @@ def eval(model, test_loader):
     return loss/len(testloader.dataset), correct / total
 
 # Load model and data (Resnet18, CIFAR-10)
-prev_net = ResNet18(num_classes=10)
-net, pruned_filter_indexes = prune_model(prev_net)
+central_net = ResNet18(num_classes=10)
+net, pruned_filter_indexes = prune_model(central_net)
 trainloader, testloader = get_dataloader()
 
 # Define Flower client
@@ -98,6 +98,8 @@ class FlowerClient(fl.client.NumPyClient):
         net.load_state_dict(state_dict, strict=True)
 
     def fit(self, parameters, config):
+        server_prune_ids = config['server_prune_ids']
+        prune_model(central_net, server_prune_ids)
         self.set_parameters(parameters)
         train_model(net, trainloader)
         pruned_index_dict = {"pruned_indexes": pruned_filter_indexes}
