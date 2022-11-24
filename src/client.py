@@ -98,14 +98,15 @@ class FlowerClient(fl.client.NumPyClient):
         state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
         central_net.load_state_dict(state_dict, strict=True)
 
+    #TODO: parameters are being updated twice
     def fit(self, parameters, config):
         server_prune_ids = config['server_prune_ids']
         prune_model_with_indices(central_net, server_prune_ids)
         self.set_parameters(parameters)
         net = central_net
         train_model(net, trainloader)
-        pruned_filter_indexes = prune_model(net)
-        pruned_index_dict = {"pruned_indexes": pruned_filter_indexes}
+        prune_indices = prune_model(net)
+        pruned_index_dict = {"prune_indices": prune_indices}
         return self.get_parameters(config={}), len(trainloader.dataset), pruned_index_dict
 
     def evaluate(self, parameters, config):

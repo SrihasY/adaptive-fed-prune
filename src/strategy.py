@@ -2,6 +2,7 @@ import flwr
 
 from logging import WARNING
 from typing import Callable, Dict, List, Optional, Tuple, Union
+import numpy as np
 
 from flwr.server.strategy import FedAvg
 
@@ -26,6 +27,7 @@ class Struct_Prune_Aggregation(FedAvg):
     def __init__ (self, ):
         super(Struct_Prune_Aggregation, self).__init__()
         self.central_parameters = self.initial_parameters
+        self.aggregate_frac = 0.3
 
     def configure_fit(
         self, server_round: int, parameters: Parameters, client_manager: ClientManager
@@ -69,6 +71,29 @@ class Struct_Prune_Aggregation(FedAvg):
         ]
         parameters_aggregated = ndarrays_to_parameters(aggregate(weights_results))
 
+        server_weights = parameters_to_ndarrays(self.central_parameters)
+        
+        num_examples = [res.num_examples for _, res in results]
+        client_metrics = [res.metrics for _,res in results]
+        
+        tot_examples = np.sum(num_examples)
+        
+        i = 0
+        for layer in server_weights:
+            if i%6 is 0: #conv layer weights
+                num_channels = layer.shape[0]
+                cardinalities = []
+                for j in range(num_channels):
+                    channel_cardinality = 0
+                    for client in fit_metrics:
+                        #TODO get client metrics index from weight dict index
+                        prune_ids = client_metrics['prune_indices'][i]
+                        if j in prune_ids:
+                            channel_cardinality += client[0]
+                    cardinalities.append(channel_cardinality)
+                server_prune_ids = [x for x in cardinalities if x >= self.aggregate_frac*tot_examples]
+            #elif i%6 is 1: #batch norm weights
+            i+=1
         # Aggregate custom metrics if aggregation fn was provided
         metrics_aggregated = {}
         if self.fit_metrics_aggregation_fn:
