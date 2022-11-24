@@ -5,8 +5,8 @@ from flwr.common import Metrics
 
 from src.strategy import Struct_Prune_Aggregation
 
-
 server_pruned_ids = []
+
 
 # Define metric aggregation function
 def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
@@ -16,6 +16,7 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
 
     # Aggregate and return custom metric (weighted average)
     return {"accuracy": sum(accuracies) / sum(examples)}
+
 
 def get_on_fit_config_fn() -> Callable[[int], Dict[str, str]]:
     """Return a function which returns training configurations."""
@@ -27,6 +28,7 @@ def get_on_fit_config_fn() -> Callable[[int], Dict[str, str]]:
 
     return fit_config
 
+
 def get_on_evaluate_config_fn() -> Callable[[int], Dict[str, str]]:
     """Return a function which returns training configurations."""
 
@@ -37,14 +39,15 @@ def get_on_evaluate_config_fn() -> Callable[[int], Dict[str, str]]:
 
     return evaluate_config
 
+
 # Define strategy
-strategy = Struct_Prune_Aggregation(evaluate_metrics_aggregation_fn=weighted_average)
+strategy = Struct_Prune_Aggregation()
 
 # Start Flower server
 fl.server.start_server(
     server_address="127.0.0.1:8080",
     config=fl.server.ServerConfig(num_rounds=3),
-    on_fit_config_fn = get_on_fit_config_fn(),
-    get_on_evaluate_config_fn = get_on_evaluate_config_fn(),
+    on_fit_config_fn=get_on_fit_config_fn(),
+    get_on_evaluate_config_fn=get_on_evaluate_config_fn(),
     strategy=strategy,
 )

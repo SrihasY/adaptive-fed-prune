@@ -1,6 +1,6 @@
 import flwr
 
-from logging import WARNING
+from logging import WARNING, log
 from typing import Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 
@@ -21,6 +21,7 @@ from flwr.common import (
     ndarrays_to_parameters,
     parameters_to_ndarrays,
 )
+from flwr.server.strategy.aggregate import aggregate
 
 class Struct_Prune_Aggregation(FedAvg):
 
@@ -74,26 +75,31 @@ class Struct_Prune_Aggregation(FedAvg):
         server_weights = parameters_to_ndarrays(self.central_parameters)
         
         num_examples = [res.num_examples for _, res in results]
-        client_metrics = [res.metrics for _,res in results]
+        client_metrics = [res.metrics for _, res in results]
         
         tot_examples = np.sum(num_examples)
         
         i = 0
+        prune_layer_index = 0
+        server_prune_ids = []
         for layer in server_weights:
-            if i%6 is 0: #conv layer weights
+            if i%6 is 0 and (i not in [0, 42, 72, 102]): #conv layer weights
                 num_channels = layer.shape[0]
                 cardinalities = []
-                for j in range(num_channels):
+                for channel_idx in range(num_channels):
                     channel_cardinality = 0
-                    for client in fit_metrics:
+                    for client, client_idx in enumerate(client_metrics):
                         #TODO get client metrics index from weight dict index
-                        prune_ids = client_metrics['prune_indices'][i]
-                        if j in prune_ids:
-                            channel_cardinality += client[0]
+                        prune_ids = client['prune_indices'][prune_layer_index]
+                        if channel_idx in prune_ids:
+                            channel_cardinality += num_examples[client_idx]
                     cardinalities.append(channel_cardinality)
-                server_prune_ids = [x for x in cardinalities if x >= self.aggregate_frac*tot_examples]
-            #elif i%6 is 1: #batch norm weights
-            i+=1
+                server_prune_ids.append([channel_idx for x, channel_idx in enumerate(cardinalities) if x >= self.aggregate_frac*tot_examples])
+                prune_layer_index += 1
+            i += 1
+
+        print("Printing the aggregated indexes.")
+        print(server_prune_ids)
         # Aggregate custom metrics if aggregation fn was provided
         metrics_aggregated = {}
         if self.fit_metrics_aggregation_fn:
