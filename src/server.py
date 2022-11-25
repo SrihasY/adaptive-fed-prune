@@ -1,11 +1,12 @@
-from typing import List, Tuple, Callable, Dict
+from typing import Callable, Dict, List, Tuple
 
 import flwr as fl
-from flwr.common import Metrics
+from flwr.common import Metrics, Scalar, Config, ndarray_to_bytes
+from strategy import Struct_Prune_Aggregation
 
-from src.strategy import Struct_Prune_Aggregation
+import numpy as np
 
-server_pruned_ids = []
+server_prune_ids = [[]*16]
 
 
 # Define metric aggregation function
@@ -18,36 +19,38 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     return {"accuracy": sum(accuracies) / sum(examples)}
 
 
-def get_on_fit_config_fn() -> Callable[[int], Dict[str, str]]:
+def get_on_fit_config_fn() -> Callable[[int], Config]:
     """Return a function which returns training configurations."""
 
-    def fit_config(server_round: int) -> Dict[str, str]:
+    def fit_config(server_round: int) -> Config:
         """Return a configuration with static batch size and (local) epochs."""
-        config = {server_pruned_ids: server_pruned_ids}
+        #server_ndarray = np.ndarray((16,0), buffer=np.array(server_prune_ids))
+        config = {"server_prune_ids": ndarray_to_bytes(np.array(server_prune_ids))}
+        print("server", config)
         return config
 
     return fit_config
 
 
-def get_on_evaluate_config_fn() -> Callable[[int], Dict[str, str]]:
+def get_on_evaluate_config_fn() -> Callable[[int], Config]:
     """Return a function which returns training configurations."""
 
-    def evaluate_config(server_round: int) -> Dict[str, str]:
+    def evaluate_config(server_round: int) -> Config:
         """Return a configuration with static batch size and (local) epochs."""
-        config = {server_pruned_ids: server_pruned_ids}
+        #server_ndarray = np.ndarray((16,0), buffer=np.array(server_prune_ids))
+        config = {"server_prune_ids": ndarray_to_bytes(np.array(server_prune_ids))}
         return config
 
     return evaluate_config
 
 
 # Define strategy
-strategy = Struct_Prune_Aggregation()
+strategy = Struct_Prune_Aggregation(on_fit_config_fn=get_on_fit_config_fn(),
+                                    on_evaluate_config_fn=get_on_evaluate_config_fn())
 
 # Start Flower server
 fl.server.start_server(
-    server_address="127.0.0.1:8080",
+    server_address="127.0.0.1:9000",
     config=fl.server.ServerConfig(num_rounds=3),
-    on_fit_config_fn=get_on_fit_config_fn(),
-    get_on_evaluate_config_fn=get_on_evaluate_config_fn(),
     strategy=strategy,
 )

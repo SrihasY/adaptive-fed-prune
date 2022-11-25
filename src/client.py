@@ -5,6 +5,7 @@ from collections import OrderedDict
 import os
 import torch
 import flwr as fl
+from flwr.common import bytes_to_ndarray
 import torch.nn.functional as F
 from torchvision.datasets import CIFAR10
 from torchvision import transforms
@@ -100,7 +101,9 @@ class FlowerClient(fl.client.NumPyClient):
 
     #TODO: parameters are being updated twice
     def fit(self, parameters, config):
-        server_prune_ids = config['server_prune_ids']
+        print("test")
+        print(config)
+        server_prune_ids = bytes_to_ndarray(config['server_prune_ids'])
         prune_model_with_indices(central_net, server_prune_ids)
         self.set_parameters(parameters)
         net = central_net
@@ -110,7 +113,7 @@ class FlowerClient(fl.client.NumPyClient):
         return self.get_parameters(config={}), len(trainloader.dataset), pruned_index_dict
 
     def evaluate(self, parameters, config):
-        server_prune_ids = config['server_prune_ids']
+        server_prune_ids = bytes_to_ndarray(config['server_prune_ids'])
         prune_model_with_indices(central_net, server_prune_ids)
         self.set_parameters(parameters)
         loss, accuracy = eval(central_net, testloader)
@@ -119,6 +122,6 @@ class FlowerClient(fl.client.NumPyClient):
 
 # Start Flower client
 fl.client.start_numpy_client(
-    server_address="127.0.0.1:8080",
+    server_address="127.0.0.1:9000",
     client=FlowerClient(),
 )

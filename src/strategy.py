@@ -15,7 +15,7 @@ from flwr.common import (
     FitIns,
     FitRes,
     MetricsAggregationFn,
-    NDArrays,
+    NDArray,
     Parameters,
     Scalar,
     ndarrays_to_parameters,
@@ -25,8 +25,13 @@ from flwr.server.strategy.aggregate import aggregate
 
 class Struct_Prune_Aggregation(FedAvg):
 
-    def __init__ (self, ):
-        super(Struct_Prune_Aggregation, self).__init__()
+    def __init__ (self, 
+        on_fit_config_fn: Optional[Callable[[int], Dict[str, NDArray]]] = None,
+        on_evaluate_config_fn: Optional[Callable[[int], Dict[str, NDArray]]] = None,
+ ) -> None:
+        super().__init__()
+        self.on_fit_config_fn = on_fit_config_fn
+        self.on_evaluate_config_fn = on_evaluate_config_fn
         self.central_parameters = self.initial_parameters
         self.aggregate_frac = 0.3
 
@@ -83,7 +88,7 @@ class Struct_Prune_Aggregation(FedAvg):
         prune_layer_index = 0
         server_prune_ids = []
         for layer in server_weights:
-            if i%6 is 0 and (i not in [0, 42, 72, 102]): #conv layer weights
+            if i%6 == 0 and (i not in [0, 42, 72, 102]): #conv layer weights
                 num_channels = layer.shape[0]
                 cardinalities = []
                 for channel_idx in range(num_channels):
