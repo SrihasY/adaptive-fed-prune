@@ -20,6 +20,7 @@ from flwr.common import (
     Scalar,
     ndarrays_to_parameters,
     parameters_to_ndarrays,
+    bytes_to_ndarray
 )
 from flwr.server.strategy.aggregate import aggregate
 
@@ -80,7 +81,7 @@ class Struct_Prune_Aggregation(FedAvg):
         server_weights = parameters_to_ndarrays(self.central_parameters)
         
         num_examples = [res.num_examples for _, res in results]
-        client_metrics = [res.metrics for _, res in results]
+        client_metrics = [bytes_to_ndarray(res.metrics['prune_indices']) for _, res in results]
         
         tot_examples = np.sum(num_examples)
         
@@ -93,9 +94,9 @@ class Struct_Prune_Aggregation(FedAvg):
                 cardinalities = []
                 for channel_idx in range(num_channels):
                     channel_cardinality = 0
-                    for client, client_idx in enumerate(client_metrics):
+                    for client_idx, client in enumerate(client_metrics):
                         #TODO get client metrics index from weight dict index
-                        prune_ids = client['prune_indices'][prune_layer_index]
+                        prune_ids = client[prune_layer_index]
                         if channel_idx in prune_ids:
                             channel_cardinality += num_examples[client_idx]
                     cardinalities.append(channel_cardinality)

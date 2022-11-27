@@ -6,7 +6,7 @@ from strategy import Struct_Prune_Aggregation
 
 import numpy as np
 
-server_prune_ids = [[]*16]
+server_prune_ids = [[]]*16
 
 
 # Define metric aggregation function
