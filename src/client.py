@@ -3,9 +3,11 @@ import math
 import sys
 from collections import OrderedDict
 import os
+from io import BytesIO
+
 import torch
 import flwr as fl
-from flwr.common import bytes_to_ndarray, ndarray_to_bytes
+from flwr.common import bytes_to_ndarray, NDArray
 import torch.nn.functional as F
 from torchvision.datasets import CIFAR10
 from torchvision import transforms
@@ -16,7 +18,7 @@ import cifar_resnet as resnet
 
 import argparse
 
-import numpy as np 
+import numpy as np
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
 
@@ -32,22 +34,25 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-#TODO: Change training data split to be iid.
+
+# TODO: Change training data split to be iid.
 def get_dataloader():
     trainset = CIFAR10('./data', train=True, transform=transforms.Compose([
-            transforms.RandomCrop(32, padding=4),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-        ]), download=True)
-    client_split = torch.utils.data.Subset(trainset, list(range(math.floor(len(trainset)*args.client_index/(10*args.num_clients)),
-                     math.floor(len(trainset)*(args.client_index+1)/(10*args.num_clients)))))
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+    ]), download=True)
+    client_split = torch.utils.data.Subset(trainset, list(
+        range(math.floor(len(trainset) * args.client_index / (10 * args.num_clients)),
+              math.floor(len(trainset) * (args.client_index + 1) / (10 * args.num_clients)))))
     train_loader = torch.utils.data.DataLoader(client_split,
-                        batch_size=args.batch_size, num_workers=2)
+                                               batch_size=args.batch_size, num_workers=2)
     test_loader = torch.utils.data.DataLoader(
         CIFAR10('./data', train=False, transform=transforms.Compose([
             transforms.ToTensor(),
-        ]),download=True),batch_size=args.batch_size, num_workers=2)
+        ]), download=True), batch_size=args.batch_size, num_workers=2)
     return train_loader, test_loader
+
 
 def train_model(model, train_loader):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -65,6 +70,7 @@ def train_model(model, train_loader):
             optimizer.step()
         scheduler.step()
 
+
 def eval(model, test_loader):
     correct = 0
     total = 0
@@ -79,15 +85,27 @@ def eval(model, test_loader):
             pred = out.max(1)[1].detach().cpu().numpy()
             loss += F.cross_entropy(out, target).item()
             target = target.cpu().numpy()
-            correct += (pred==target).sum()
+            correct += (pred == target).sum()
             total += len(target)
-    return loss/len(testloader.dataset), correct / total
+    return loss / len(testloader.dataset), correct / total
+
+
+def custom_ndarray_to_bytes(ndarray: NDArray) -> bytes:
+    """Serialize NumPy ndarray to bytes."""
+    bytes_io = BytesIO()
+    # WARNING: NEVER set allow_pickle to true.
+    # Reason: loading pickled data can execute arbitrary code
+    # Source: https://numpy.org/doc/stable/reference/generated/numpy.save.html
+    np.save(bytes_io, ndarray, allow_pickle=True)  # type: ignore
+    return bytes_io.getvalue()
+
 
 # Load model and data (Resnet18, CIFAR-10)
 central_net = ResNet18(num_classes=10)
 net = central_net
 trainloader, testloader = get_dataloader()
-network_parameter = 1 # to be used for scaling in the array
+network_parameter = 1  # to be used for scaling in the array
+
 
 # Define Flower client
 class FlowerClient(fl.client.NumPyClient):
@@ -99,9 +117,9 @@ class FlowerClient(fl.client.NumPyClient):
         state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
         central_net.load_state_dict(state_dict, strict=True)
 
-    #TODO: parameters are being updated twice
+    # TODO: parameters are being updated twice
     def fit(self, parameters, config):
-        #print("test")
+        # print("test")
         server_prune_ids = bytes_to_ndarray(config['server_prune_ids']).tolist()
         print(server_prune_ids)
         prune_model_with_indices(central_net, server_prune_ids)
@@ -113,7 +131,7 @@ class FlowerClient(fl.client.NumPyClient):
         print(prune_indices)
         prune_indices = np.array([np.array(layer_ids) for layer_ids in prune_indices])
         print(np.array(prune_indices).dtype)
-        pruned_index_dict = {"prune_indices": ndarray_to_bytes(np.array(prune_indices))}
+        pruned_index_dict = {"prune_indices": custom_ndarray_to_bytes(np.array(prune_indices))}
         return self.get_parameters(config={}), len(trainloader.dataset), pruned_index_dict
 
     def evaluate(self, parameters, config):
