@@ -1,7 +1,9 @@
+from io import BytesIO
+
 import flwr
 
 from logging import WARNING, log
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union, cast
 import numpy as np
 
 from flwr.server.strategy import FedAvg
@@ -19,17 +21,28 @@ from flwr.common import (
     Parameters,
     Scalar,
     ndarrays_to_parameters,
-    parameters_to_ndarrays,
-    bytes_to_ndarray
+    parameters_to_ndarrays
 )
 from flwr.server.strategy.aggregate import aggregate
 
+
+#Helper functions
+def custom_bytes_to_ndarray(tensor: bytes) -> NDArray:
+    """Deserialize NumPy ndarray from bytes."""
+    bytes_io = BytesIO(tensor)
+    # WARNING: NEVER set allow_pickle to true.
+    # Reason: loading pickled data can execute arbitrary code
+    # Source: https://numpy.org/doc/stable/reference/generated/numpy.load.html
+    ndarray_deserialized = np.load(bytes_io, allow_pickle=True)  # type: ignore
+    return cast(NDArray, ndarray_deserialized)
+
+
 class Struct_Prune_Aggregation(FedAvg):
 
-    def __init__ (self, 
-        on_fit_config_fn: Optional[Callable[[int], Dict[str, NDArray]]] = None,
-        on_evaluate_config_fn: Optional[Callable[[int], Dict[str, NDArray]]] = None,
- ) -> None:
+    def __init__(self,
+                 on_fit_config_fn: Optional[Callable[[int], Dict[str, NDArray]]] = None,
+                 on_evaluate_config_fn: Optional[Callable[[int], Dict[str, NDArray]]] = None,
+                 ) -> None:
         super().__init__()
         self.on_fit_config_fn = on_fit_config_fn
         self.on_evaluate_config_fn = on_evaluate_config_fn
@@ -37,7 +50,7 @@ class Struct_Prune_Aggregation(FedAvg):
         self.aggregate_frac = 0.3
 
     def configure_fit(
-        self, server_round: int, parameters: Parameters, client_manager: ClientManager
+            self, server_round: int, parameters: Parameters, client_manager: ClientManager
     ) -> List[Tuple[ClientProxy, FitIns]]:
         """Configure the next round of training."""
         self.central_parameters = parameters
@@ -59,10 +72,10 @@ class Struct_Prune_Aggregation(FedAvg):
         return [(client, fit_ins) for client in clients]
 
     def aggregate_fit(
-        self,
-        server_round: int,
-        results: List[Tuple[ClientProxy, FitRes]],
-        failures: List[Union[Tuple[ClientProxy, FitRes], BaseException]],
+            self,
+            server_round: int,
+            results: List[Tuple[ClientProxy, FitRes]],
+            failures: List[Union[Tuple[ClientProxy, FitRes], BaseException]],
     ) -> Tuple[Optional[Parameters], Dict[str, Scalar]]:
         """Aggregate fit results using weighted average."""
         if not results:
@@ -79,28 +92,29 @@ class Struct_Prune_Aggregation(FedAvg):
         parameters_aggregated = ndarrays_to_parameters(aggregate(weights_results))
 
         server_weights = parameters_to_ndarrays(self.central_parameters)
-        
+
         num_examples = [res.num_examples for _, res in results]
-        client_metrics = [bytes_to_ndarray(res.metrics['prune_indices']) for _, res in results]
-        
+        client_metrics = [custom_bytes_to_ndarray(res.metrics['prune_indices']) for _, res in results]
+
         tot_examples = np.sum(num_examples)
-        
+
         i = 0
         prune_layer_index = 0
         server_prune_ids = []
         for layer in server_weights:
-            if i%6 == 0 and (i not in [0, 42, 72, 102]): #conv layer weights
+            if i % 6 == 0 and (i not in [0, 42, 72, 102]):  # conv layer weights
                 num_channels = layer.shape[0]
                 cardinalities = []
                 for channel_idx in range(num_channels):
                     channel_cardinality = 0
                     for client_idx, client in enumerate(client_metrics):
-                        #TODO get client metrics index from weight dict index
+                        # TODO get client metrics index from weight dict index
                         prune_ids = client[prune_layer_index]
                         if channel_idx in prune_ids:
                             channel_cardinality += num_examples[client_idx]
                     cardinalities.append(channel_cardinality)
-                server_prune_ids.append([channel_idx for x, channel_idx in enumerate(cardinalities) if x >= self.aggregate_frac*tot_examples])
+                server_prune_ids.append([channel_idx for x, channel_idx in enumerate(cardinalities) if
+                                         x >= self.aggregate_frac * tot_examples])
                 prune_layer_index += 1
             i += 1
 
