@@ -1,6 +1,5 @@
 from io import BytesIO
 import json
-import flwr
 
 from logging import WARNING, log
 from typing import Callable, Dict, List, Optional, Tuple, Union, cast
@@ -25,6 +24,9 @@ from flwr.common import (
 )
 from flwr.server.strategy.aggregate import aggregate
 
+from src.cifar_resnet import ResNet18
+from src.prune import prune_model_with_indices
+
 
 #Helper functions
 def custom_bytes_to_ndarray(tensor: bytes) -> NDArray:
@@ -48,6 +50,7 @@ class Struct_Prune_Aggregation(FedAvg):
         self.on_evaluate_config_fn = on_evaluate_config_fn
         self.central_parameters = self.initial_parameters
         self.aggregate_frac = 0.3
+        self.server_net = ResNet18(num_classes=10)
 
     def configure_fit(
             self, server_round: int, parameters: Parameters, client_manager: ClientManager
@@ -85,41 +88,39 @@ class Struct_Prune_Aggregation(FedAvg):
             return None, {}
 
         # Convert results
-        weights_results = [
-            (parameters_to_ndarrays(fit_res.parameters), fit_res.num_examples)
-            for _, fit_res in results
-        ]
-        parameters_aggregated = ndarrays_to_parameters(aggregate(weights_results))
+        client_parameters = [parameters_to_ndarrays(fit_res.parameters) for _, fit_res in results]
+        #parameters_aggregated = ndarrays_to_parameters(aggregate(weights_results))
 
-        server_weights = parameters_to_ndarrays(self.central_parameters)
+        server_parameters = parameters_to_ndarrays(self.central_parameters)
 
         client_metrics = [json.loads(res.metrics['prune_indices'].decode('utf-8')) for _, res in results]
         num_examples = [res.num_examples for _, res in results]
-        
+
+        model_dict = self.server_net.state_dict()
+        server_prune_ids = []
         tot_examples = np.sum(num_examples)
 
-        i = 0
-        prune_layer_index = 0
-        server_prune_ids = []
-        for layer in server_weights:
-            if i % 6 == 0 and (i not in [0, 42, 72, 102]):  # conv layer weights
-                num_channels = layer.shape[0]
+        for index, key in enumerate(model_dict):
+            key_list = key.split('.')
+            key = ""
+            if key_list[-1] == "conv[1-2]+":
+                key = key + ".out"
+                num_channels = server_parameters[index].shape[1]
                 cardinalities = []
                 for channel_idx in range(num_channels):
                     channel_cardinality = 0
                     for client_idx, client in enumerate(client_metrics):
                         # TODO get client metrics index from weight dict index
-                        prune_ids = client[prune_layer_index]
+                        prune_ids = client[key]
                         if channel_idx in prune_ids:
                             channel_cardinality += num_examples[client_idx]
                     cardinalities.append(channel_cardinality)
                 server_prune_ids.append([channel_idx for x, channel_idx in enumerate(cardinalities) if
                                          x >= self.aggregate_frac * tot_examples])
-                prune_layer_index += 1
-            i += 1
-
         print("Printing the aggregated indexes.")
         print(server_prune_ids)
+        final_server_prune_indices = prune_model_with_indices(self.server_net, server_prune_ids)
+
         # Aggregate custom metrics if aggregation fn was provided
         metrics_aggregated = {}
         if self.fit_metrics_aggregation_fn:
@@ -128,7 +129,7 @@ class Struct_Prune_Aggregation(FedAvg):
         elif server_round == 1:  # Only log this warning once
             log(WARNING, "No fit_metrics_aggregation_fn provided")
 
-        return parameters_aggregated, metrics_aggregated
+        return server_parameters, metrics_aggregated # To be changed
 
     # Might need for client personalized model evaluation.
     # def aggregate_evaluate(self, server_round, results, failures):
