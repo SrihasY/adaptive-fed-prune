@@ -110,10 +110,6 @@ class FlowerClient(fl.client.NumPyClient):
         net = central_net
         train_model(net, trainloader)
         prune_indices = prune_model(net)
-        # print("test")
-        # print(prune_indices)
-        # prune_indices = np.array([np.array(layer_ids) for layer_ids in prune_indices])
-        # print(np.array(prune_indices).dtype)
         prune_indices = json.dumps(prune_indices).encode('utf-8')
         pruned_index_dict = {"prune_indices": prune_indices}
         return self.get_parameters(config={}), len(trainloader.dataset), pruned_index_dict

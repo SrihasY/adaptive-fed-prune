@@ -82,9 +82,7 @@ class Struct_Prune_Aggregation(FedAvg):
         server_weights = parameters_to_ndarrays(self.central_parameters)
         
         client_metrics = [json.loads(res.metrics['prune_indices'].decode('utf-8')) for _, res in results]
-        print(client_metrics[0]['layer1.0.conv1.out'])
         num_examples = [res.num_examples for _, res in results]
-        client_metrics = [bytes_to_ndarray(res.metrics['prune_indices']) for _, res in results]
         
         tot_examples = np.sum(num_examples)
         
@@ -121,7 +119,4 @@ class Struct_Prune_Aggregation(FedAvg):
 
     # Might need for client personalized model evaluation.
     # def aggregate_evaluate(self, server_round, results, failures):
-    #     # Your implementation here``
-    
-def get_mapped_weight(client_params, index):
-    
+    #     # Your implementation here`
