@@ -1,5 +1,5 @@
 from io import BytesIO
-
+import json
 import flwr
 
 from logging import WARNING, log
@@ -93,9 +93,9 @@ class Struct_Prune_Aggregation(FedAvg):
 
         server_weights = parameters_to_ndarrays(self.central_parameters)
 
+        client_metrics = [json.loads(res.metrics['prune_indices'].decode('utf-8')) for _, res in results]
         num_examples = [res.num_examples for _, res in results]
-        client_metrics = [custom_bytes_to_ndarray(res.metrics['prune_indices']) for _, res in results]
-
+        
         tot_examples = np.sum(num_examples)
 
         i = 0
