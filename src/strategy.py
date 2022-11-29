@@ -4,6 +4,7 @@ import json
 from logging import WARNING, log
 from typing import Callable, Dict, List, Optional, Tuple, Union, cast
 import numpy as np
+import re
 
 from flwr.server.strategy import FedAvg
 
@@ -24,8 +25,8 @@ from flwr.common import (
 )
 from flwr.server.strategy.aggregate import aggregate
 
-from src.cifar_resnet import ResNet18
-from src.prune import prune_model_with_indices
+from cifar_resnet import ResNet18
+from prune import prune_model_with_indices
 
 
 #Helper functions
@@ -102,23 +103,29 @@ class Struct_Prune_Aggregation(FedAvg):
 
         for index, key in enumerate(model_dict):
             key_list = key.split('.')
-            key = ""
-            if key_list[-1] == "conv[1-2]+":
-                key = key + ".out"
-                num_channels = server_parameters[index].shape[1]
+            key = key[:-1*len(key_list[-1])]
+            #print(key_list)
+            #print(re.match("^conv[1-2]+$", key_list[-1]))
+            if re.match("^conv[1-2]+$", key_list[-2]):
+                key = key + "out"
+                #print(key)
+                num_channels = (server_parameters[index]).shape[0]
                 cardinalities = []
                 for channel_idx in range(num_channels):
+                    #print("Inside counting channels")
                     channel_cardinality = 0
                     for client_idx, client in enumerate(client_metrics):
+                        #print("Inside counting clients")
                         # TODO get client metrics index from weight dict index
+                        #print(client["conv1.out"])
                         prune_ids = client[key]
                         if channel_idx in prune_ids:
                             channel_cardinality += num_examples[client_idx]
                     cardinalities.append(channel_cardinality)
-                server_prune_ids.append([channel_idx for x, channel_idx in enumerate(cardinalities) if
+                server_prune_ids.append([channel_idx for channel_idx, x in enumerate(cardinalities) if
                                          x >= self.aggregate_frac * tot_examples])
-        print("Printing the aggregated indexes.")
-        print(server_prune_ids)
+        #print("Printing the aggregated indexes.")
+        #print(server_prune_ids)
         final_server_prune_indices = prune_model_with_indices(self.server_net, server_prune_ids)
 
         # Aggregate custom metrics if aggregation fn was provided

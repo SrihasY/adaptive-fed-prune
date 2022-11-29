@@ -43,8 +43,8 @@ def get_dataloader():
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
         ]), download=True)
-    client_split = torch.utils.data.Subset(trainset, list(range(math.floor(len(trainset)*args.client_index/(10*args.num_clients)),
-                     math.floor(len(trainset)*(args.client_index+1)/(10*args.num_clients)))))
+    client_split = torch.utils.data.Subset(trainset, list(range(math.floor(len(trainset)*args.client_index/(100*args.num_clients)),
+                     math.floor(len(trainset)*(args.client_index+1)/(100*args.num_clients)))))
     train_loader = torch.utils.data.DataLoader(client_split,
                         batch_size=args.batch_size, num_workers=2)
     test_loader = torch.utils.data.DataLoader(
