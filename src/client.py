@@ -1,22 +1,23 @@
-import warnings
+import argparse
+import json
 import math
-import sys
-from collections import OrderedDict
 import os
-import torch
+import sys
+import warnings
+from collections import OrderedDict
+
 import flwr as fl
-from flwr.common import bytes_to_ndarray, ndarray_to_bytes
+import numpy as np
+import torch
 import torch.nn.functional as F
-from torchvision.datasets import CIFAR10
+from flwr.common import bytes_to_ndarray, ndarray_to_bytes
 from torchvision import transforms
+from torchvision.datasets import CIFAR10
 from tqdm import tqdm
+
+import cifar_resnet as resnet
 from cifar_resnet import ResNet18
 from prune import prune_model, prune_model_with_indices
-import cifar_resnet as resnet
-
-import argparse
-
-import numpy as np 
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
 
@@ -109,11 +110,12 @@ class FlowerClient(fl.client.NumPyClient):
         net = central_net
         train_model(net, trainloader)
         prune_indices = prune_model(net)
-        print("test")
-        print(prune_indices)
-        prune_indices = np.array([np.array(layer_ids) for layer_ids in prune_indices])
-        print(np.array(prune_indices).dtype)
-        pruned_index_dict = {"prune_indices": ndarray_to_bytes(np.array(prune_indices))}
+        # print("test")
+        # print(prune_indices)
+        # prune_indices = np.array([np.array(layer_ids) for layer_ids in prune_indices])
+        # print(np.array(prune_indices).dtype)
+        prune_indices = json.dumps(prune_indices).encode('utf-8')
+        pruned_index_dict = {"prune_indices": prune_indices}
         return self.get_parameters(config={}), len(trainloader.dataset), pruned_index_dict
 
     def evaluate(self, parameters, config):

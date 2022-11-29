@@ -90,10 +90,31 @@ def prune_model_with_indices(model, indices=[]):
     if not indices:
         return model
 
+    final_prune_indices = {}
     model.cpu()
     DG = tp.DependencyGraph().build_dependency(model, torch.randn(1, 3, 32, 32))
     def prune_conv(conv, amount=0.2, ids = []):
         plan = DG.get_pruning_plan(conv, tp.prune_conv_out_channel, ids)
+        for dep, idxs in plan.plan:
+            key = None
+            if dep.target._name is not None:
+                if 'conv' in dep.target._name or 'shortcut.0' in dep.target._name: #conv layer pruning indices
+                    if(dep.handler.__class__.__name__ == "ConvOutChannelPruner"):
+                        key = dep.target._name + '.out'
+                    elif(dep.handler.__class__.__name__ == "ConvInChannelPruner"):
+                        key = dep.target._name + '.in'
+                elif 'bn' in dep.target._name or 'shortcut.1' in dep.target._name: #batchnorm layer pruning indices
+                    if(dep.handler.__class__.__name__ == "BatchNormPruner"):
+                        key = dep.target._name
+                elif 'linear' in dep.target._name:
+                    if(dep.handler.__class__.__name__ == "LinearInChannelPruner"): #fully connected layer pruning indices
+                        key = dep.target._name
+                        
+                if key is not None:
+                    if key in final_prune_indices:
+                        final_prune_indices[key].extend(list(idxs))
+                    else:
+                        final_prune_indices[key] = list(idxs)
         plan.exec()
 
     block_prune_probs = [0.1, 0.1, 0.2, 0.2, 0.2, 0.2, 0.3, 0.3]
@@ -106,17 +127,42 @@ def prune_model_with_indices(model, indices=[]):
             prune_conv(m.conv2, block_prune_probs[blk_id], indices[i])
             i = i + 1
             blk_id += 1
-    return model
+    
+    #remove repeated values, if any
+    for key in final_prune_indices.keys():
+        layer_indices = list(dict.fromkeys(final_prune_indices[key]))
+        layer_indices.sort()
+        final_prune_indices[key] = layer_indices
+    return final_prune_indices
 
 def prune_model(model):
     model.cpu()
     DG = tp.DependencyGraph().build_dependency(model, torch.randn(1, 3, 32, 32))
-    final_prune_indices = []
+    final_prune_indices = {}
     def prune_conv(conv, amount=0.2):
         strategy = tp.strategy.L1Strategy()
         ids = strategy(conv.weight, amount=amount)
-        final_prune_indices.append(list(ids))
         plan = DG.get_pruning_plan(conv, tp.prune_conv_out_channel, ids)
+        for dep, idxs in plan.plan:
+            key = None
+            if dep.target._name is not None:
+                if 'conv' in dep.target._name or 'shortcut.0' in dep.target._name: #conv layer pruning indices
+                    if(dep.handler.__class__.__name__ == "ConvOutChannelPruner"):
+                        key = dep.target._name + '.out'
+                    elif(dep.handler.__class__.__name__ == "ConvInChannelPruner"):
+                        key = dep.target._name + '.in'
+                elif 'bn' in dep.target._name or 'shortcut.1' in dep.target._name: #batchnorm layer pruning indices
+                    if(dep.handler.__class__.__name__ == "BatchNormPruner"):
+                        key = dep.target._name
+                elif 'linear' in dep.target._name:
+                    if(dep.handler.__class__.__name__ == "LinearInChannelPruner"): #fully connected layer pruning indices
+                        key = dep.target._name
+                        
+                if key is not None:
+                    if key in final_prune_indices:
+                        final_prune_indices[key].extend(list(idxs))
+                    else:
+                        final_prune_indices[key] = list(idxs)
         plan.exec()
 
     block_prune_probs = [0.1, 0.1, 0.2, 0.2, 0.2, 0.2, 0.3, 0.3]
@@ -126,6 +172,12 @@ def prune_model(model):
             prune_conv(m.conv1, block_prune_probs[blk_id])
             prune_conv(m.conv2, block_prune_probs[blk_id])
             blk_id += 1
+
+    #remove repeated values, if any
+    for key in final_prune_indices.keys():
+        layer_indices = list(dict.fromkeys(final_prune_indices[key]))
+        layer_indices.sort()
+        final_prune_indices[key] = layer_indices
     return final_prune_indices
 
 #python prune_resnet18_cifar10.py --mode prune --round 1 --total_epochs 1 --step_size 20 # 4.5M, Acc=0.9229
