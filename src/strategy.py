@@ -39,14 +39,15 @@ class Struct_Prune_Aggregation(FedAvg):
     def __init__(self,
                  on_fit_config_fn: Optional[Callable[[int, List[List[int]]], Dict[str, NDArray]]] = None,
                  on_evaluate_config_fn: Optional[Callable[[int, List[List[int]]], Dict[str, NDArray]]] = None,
+                 evaluate_metrics_aggregation_fn: Optional[MetricsAggregationFn] = None,
                  ) -> None:
-        super().__init__()
+        super().__init__(evaluate_metrics_aggregation_fn=evaluate_metrics_aggregation_fn)
         self.server_prune_ids = [[]]*16
         self.on_fit_config_fn = on_fit_config_fn
         self.on_evaluate_config_fn = on_evaluate_config_fn
         self.central_parameters = self.initial_parameters
         self.aggregate_frac = 1
-        self.server_net = ResNet18(num_classes=10)
+        self.server_net = torch.load('resnet18-round3.pth', map_location="cuda" if torch.cuda.is_available() else "cpu")
 
     def configure_fit(
             self, server_round: int, parameters: Parameters, client_manager: ClientManager
@@ -63,7 +64,7 @@ class Struct_Prune_Aggregation(FedAvg):
             # Custom fit config function provided
             config = self.on_fit_config_fn(server_round, self.server_prune_ids)
         test = custom_bytes_to_ndarray(config['server_prune_ids']).tolist()
-        print(test)
+        print("initial server prune ids: ", test)
         fit_ins = FitIns(parameters, config)
 
         #print(fit_ins)
@@ -119,11 +120,11 @@ class Struct_Prune_Aggregation(FedAvg):
 
         # Convert results
         client_parameters = [parameters_to_ndarrays(fit_res.parameters) for _, fit_res in results]
-        #parameters_aggregated = ndarrays_to_parameters(aggregate(weights_results))
 
         server_parameters = self.central_parameters
 
         client_metrics = [json.loads(res.metrics['prune_indices'].decode('utf-8')) for _, res in results]
+        client_conv_metrics = [json.loads(res.metrics['conv_prune_indices'].decode('utf-8')) for _, res in results]
         num_examples = [res.num_examples for _, res in results]
 
         model_dict = self.server_net.state_dict()
@@ -133,28 +134,21 @@ class Struct_Prune_Aggregation(FedAvg):
         for index, key in enumerate(model_dict):
             key_list = key.split('.')
             key = key[:-1*len(key_list[-1])]
-            #print(key_list)
-            #print(re.match("^conv[1-2]+$", key_list[-1]))
-            if re.match("^conv[1-2]+$", key_list[-2]):
+            if re.match("^conv[1-2]+$", key_list[-2]) and key != 'conv1.':
                 key = key + "out"
-                #print(key)
                 num_channels = (server_parameters[index]).shape[0]
                 cardinalities = []
                 for channel_idx in range(num_channels):
-                    #print("Inside counting channels")
                     channel_cardinality = 0
-                    for client_idx, client in enumerate(client_metrics):
-                        #print("Inside counting clients")
-                        # TODO get client metrics index from weight dict index
-                        #print(client["conv1.out"])
-                        prune_ids = client[key]
+                    for client in client_conv_metrics:
+                        prune_ids = client[len(server_prune_ids)]
                         if channel_idx in prune_ids:
                             channel_cardinality += num_examples[client_idx]
                     cardinalities.append(channel_cardinality)
                 server_prune_ids.append([channel_idx for channel_idx, x in enumerate(cardinalities) if
                                          x >= self.aggregate_frac * tot_examples])
-        #print("Printing the aggregated indexes.")
-        #print(server_prune_ids)
+        print("Printing the aggregated indexes.")
+        print(server_prune_ids)
         self.server_prune_ids = server_prune_ids
         final_server_prune_indices = prune_model_with_indices(self.server_net, server_prune_ids)
         pruned_parameters = [val.cpu().numpy() for _, val in self.server_net.state_dict().items()]

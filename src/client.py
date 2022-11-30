@@ -1,4 +1,5 @@
 import argparse
+import copy
 import json
 import math
 import os
@@ -87,8 +88,8 @@ def eval(model, test_loader):
 
 
 # Load model and data (Resnet18, CIFAR-10)
-central_net = ResNet18(num_classes=10)
-net = central_net
+central_net = torch.load('resnet18-round3.pth', map_location="cuda" if torch.cuda.is_available() else "cpu")
+net = copy.deepcopy(central_net)
 trainloader, testloader = get_dataloader()
 network_parameter = 1  # to be used for scaling in the array
 
@@ -103,16 +104,19 @@ class FlowerClient(fl.client.NumPyClient):
         central_net.load_state_dict(state_dict, strict=True)
 
     def fit(self, parameters, config):
-        if config['server_round'] == 0:
+        print(config['server_round'])
+        if config['server_round'] == 1:
             #server_prune_ids = custom_bytes_to_ndarray(config['server_prune_ids']).tolist()
             #print(server_prune_ids)
             #prune_model_with_indices(central_net, server_prune_ids)
             self.set_parameters(parameters)
-        net = central_net
+        net = copy.deepcopy(central_net)
         train_model(net, trainloader)
-        prune_indices = prune_model(net)
+        conv_prune_indices, prune_indices = prune_model(net)
+        #print("client pruned ", prune_indices)
         prune_indices = json.dumps(prune_indices).encode('utf-8')
-        pruned_index_dict = {"prune_indices": prune_indices}
+        conv_prune_indices = json.dumps(prune_indices).encode('utf-8')
+        pruned_index_dict = {"prune_indices": prune_indices, "conv_prune_indices": conv_prune_indices}
         return self.get_parameters(config={}), len(trainloader.dataset), pruned_index_dict
 
     def evaluate(self, parameters, config):

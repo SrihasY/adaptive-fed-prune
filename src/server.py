@@ -45,7 +45,8 @@ def get_on_evaluate_config_fn() -> Callable[[int, List[List[int]]], Config]:
 
 # Define strategy
 strategy = Struct_Prune_Aggregation(on_fit_config_fn=get_on_fit_config_fn(),
-                                    on_evaluate_config_fn=get_on_evaluate_config_fn())
+                                    on_evaluate_config_fn=get_on_evaluate_config_fn(),
+                                    evaluate_metrics_aggregation_fn=weighted_average)
 
 # Start Flower server
 fl.server.start_server(

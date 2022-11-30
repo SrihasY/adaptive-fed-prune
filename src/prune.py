@@ -107,6 +107,7 @@ def prune_model_with_indices(model, indices=[]):
         prev_indices[key] = []
     def prune_conv(conv, amount=0.2, ids = []):
         plan = DG.get_pruning_plan(conv, tp.prune_conv_out_channel, ids)
+        #print(plan)
         for dep, idxs in plan.plan:
             key = None
             if dep.target._name is not None:
@@ -149,6 +150,7 @@ def prune_model_with_indices(model, indices=[]):
             i = i + 1
             blk_id += 1
     
+    #print(final_prune_indices)
     #remove repeated values, if any
     for key in final_prune_indices.keys():
         layer_indices = list(dict.fromkeys(final_prune_indices[key]))
@@ -160,6 +162,7 @@ def prune_model_with_indices(model, indices=[]):
 def prune_model(model):
     model.cpu()
     DG = tp.DependencyGraph().build_dependency(model, torch.randn(1, 3, 32, 32))
+    conv_prune_indices = []
     final_prune_indices = {}
     prev_indices = {}
     for key in model.state_dict().keys():
@@ -176,6 +179,7 @@ def prune_model(model):
     def prune_conv(conv, amount=0.2):
         strategy = tp.strategy.L1Strategy()
         ids = strategy(conv.weight, amount=amount)
+        conv_prune_indices.append(ids)
         plan = DG.get_pruning_plan(conv, tp.prune_conv_out_channel, ids)
         for dep, idxs in plan.plan:
             key = None
@@ -216,12 +220,13 @@ def prune_model(model):
             prune_conv(m.conv2, block_prune_probs[blk_id])
             blk_id += 1
 
+    #print(final_prune_indices)
     #remove repeated values, if any
     for key in final_prune_indices.keys():
         layer_indices = list(dict.fromkeys(final_prune_indices[key]))
         layer_indices.sort()
         final_prune_indices[key] = layer_indices
-    return final_prune_indices
+    return conv_prune_indices, final_prune_indices
 
 #python prune_resnet18_cifar10.py --mode prune --round 1 --total_epochs 1 --step_size 20 # 4.5M, Acc=0.9229
 
