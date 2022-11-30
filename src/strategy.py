@@ -124,7 +124,7 @@ class Struct_Prune_Aggregation(FedAvg):
         server_parameters = self.central_parameters
 
         client_metrics = [json.loads(res.metrics['prune_indices'].decode('utf-8')) for _, res in results]
-        client_conv_metrics = [json.loads(res.metrics['conv_prune_indices'].decode('utf-8')) for _, res in results]
+        client_conv_metrics = [custom_bytes_to_ndarray(res.metrics['conv_prune_indices']) for _, res in results]
         num_examples = [res.num_examples for _, res in results]
 
         model_dict = self.server_net.state_dict()
@@ -140,7 +140,7 @@ class Struct_Prune_Aggregation(FedAvg):
                 cardinalities = []
                 for channel_idx in range(num_channels):
                     channel_cardinality = 0
-                    for client in client_conv_metrics:
+                    for client_idx, client in enumerate(client_conv_metrics):
                         prune_ids = client[len(server_prune_ids)]
                         if channel_idx in prune_ids:
                             channel_cardinality += num_examples[client_idx]

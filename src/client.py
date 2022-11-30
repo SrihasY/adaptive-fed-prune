@@ -40,8 +40,8 @@ def get_dataloader():
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
         ]), download=True)
-    client_split = torch.utils.data.Subset(trainset, list(range(math.floor(len(trainset)*args.client_index/(100*args.num_clients)),
-                     math.floor(len(trainset)*(args.client_index+1)/(100*args.num_clients)))))
+    client_split = torch.utils.data.Subset(trainset, list(range(math.floor(len(trainset)*args.client_index/(10*args.num_clients)),
+                     math.floor(len(trainset)*(args.client_index+1)/(10*args.num_clients)))))
     train_loader = torch.utils.data.DataLoader(client_split,
                         batch_size=args.batch_size, num_workers=2)
     test_loader = torch.utils.data.DataLoader(
@@ -113,9 +113,9 @@ class FlowerClient(fl.client.NumPyClient):
         net = copy.deepcopy(central_net)
         train_model(net, trainloader)
         conv_prune_indices, prune_indices = prune_model(net)
-        #print("client pruned ", prune_indices)
+        print("client pruned ", conv_prune_indices)
         prune_indices = json.dumps(prune_indices).encode('utf-8')
-        conv_prune_indices = json.dumps(prune_indices).encode('utf-8')
+        conv_prune_indices = custom_ndarray_to_bytes(conv_prune_indices)
         pruned_index_dict = {"prune_indices": prune_indices, "conv_prune_indices": conv_prune_indices}
         return self.get_parameters(config={}), len(trainloader.dataset), pruned_index_dict
 

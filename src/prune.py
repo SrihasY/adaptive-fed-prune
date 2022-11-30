@@ -179,7 +179,7 @@ def prune_model(model):
     def prune_conv(conv, amount=0.2):
         strategy = tp.strategy.L1Strategy()
         ids = strategy(conv.weight, amount=amount)
-        conv_prune_indices.append(ids)
+        conv_prune_indices.append(np.array(ids))
         plan = DG.get_pruning_plan(conv, tp.prune_conv_out_channel, ids)
         for dep, idxs in plan.plan:
             key = None
