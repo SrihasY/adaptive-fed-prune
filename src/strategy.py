@@ -47,6 +47,7 @@ class Struct_Prune_Aggregation(FedAvg):
                  on_evaluate_config_fn: Optional[Callable[[int], Dict[str, NDArray]]] = None,
                  ) -> None:
         super().__init__()
+        self.server_prune_ids = [[]]*16
         self.on_fit_config_fn = on_fit_config_fn
         self.on_evaluate_config_fn = on_evaluate_config_fn
         self.central_parameters = self.initial_parameters
@@ -61,7 +62,7 @@ class Struct_Prune_Aggregation(FedAvg):
         config = {}
         if self.on_fit_config_fn is not None:
             # Custom fit config function provided
-            config = self.on_fit_config_fn(server_round)
+            config = self.on_fit_config_fn(self.server_prune_ids)
         fit_ins = FitIns(parameters, config)
 
         # Sample clients
@@ -74,6 +75,32 @@ class Struct_Prune_Aggregation(FedAvg):
 
         # Return client/config pairs
         return [(client, fit_ins) for client in clients]
+
+    def configure_evaluate(
+        self, server_round: int, parameters: Parameters, client_manager: ClientManager
+    ) -> List[Tuple[ClientProxy, EvaluateIns]]:
+        """Configure the next round of evaluation."""
+        # Do not configure federated evaluation if fraction eval is 0.
+        if self.fraction_evaluate == 0.0:
+            return []
+
+        # Parameters and config
+        config = {}
+        if self.on_evaluate_config_fn is not None:
+            # Custom evaluation config function provided
+            config = self.on_evaluate_config_fn(self.server_prune_ids)
+        evaluate_ins = EvaluateIns(parameters, config)
+
+        # Sample clients
+        sample_size, min_num_clients = self.num_evaluation_clients(
+            client_manager.num_available()
+        )
+        clients = client_manager.sample(
+            num_clients=sample_size, min_num_clients=min_num_clients
+        )
+
+        # Return client/config pairs
+        return [(client, evaluate_ins) for client in clients]
 
     def aggregate_fit(
             self,
@@ -126,6 +153,7 @@ class Struct_Prune_Aggregation(FedAvg):
                                          x >= self.aggregate_frac * tot_examples])
         #print("Printing the aggregated indexes.")
         #print(server_prune_ids)
+        self.server_prune_ids = server_prune_ids
         final_server_prune_indices = prune_model_with_indices(self.server_net, server_prune_ids)
 
         # Aggregate custom metrics if aggregation fn was provided

@@ -6,8 +6,6 @@ from strategy import Struct_Prune_Aggregation
 
 import numpy as np
 
-server_prune_ids = [[]]*16
-
 
 # Define metric aggregation function
 def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
@@ -22,7 +20,7 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
 def get_on_fit_config_fn() -> Callable[[int], Config]:
     """Return a function which returns training configurations."""
 
-    def fit_config(server_round: int) -> Config:
+    def fit_config(server_prune_ids: List[int]) -> Config:
         """Return a configuration with static batch size and (local) epochs."""
         config = {"server_prune_ids": ndarray_to_bytes(np.array(server_prune_ids))}
         print("server", config)
@@ -34,7 +32,7 @@ def get_on_fit_config_fn() -> Callable[[int], Config]:
 def get_on_evaluate_config_fn() -> Callable[[int], Config]:
     """Return a function which returns training configurations."""
 
-    def evaluate_config(server_round: int) -> Config:
+    def evaluate_config(server_prune_ids: List[int]) -> Config:
         """Return a configuration with static batch size and (local) epochs."""
         #server_ndarray = np.ndarray((16,0), buffer=np.array(server_prune_ids))
         config = {"server_prune_ids": ndarray_to_bytes(np.array(server_prune_ids))}
