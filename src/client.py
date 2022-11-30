@@ -6,14 +6,10 @@ import sys
 import warnings
 from collections import OrderedDict
 
-from io import BytesIO
-
-import torch
 import flwr as fl
-import numpy as np
 import torch
 import torch.nn.functional as F
-from flwr.common import bytes_to_ndarray, ndarray_to_bytes, NDArray
+from flwr.common import bytes_to_ndarray
 from torchvision import transforms
 from torchvision.datasets import CIFAR10
 from tqdm import tqdm
@@ -88,16 +84,6 @@ def eval(model, test_loader):
             correct += (pred == target).sum()
             total += len(target)
     return loss / len(testloader.dataset), correct / total
-
-
-def custom_ndarray_to_bytes(ndarray: NDArray) -> bytes:
-    """Serialize NumPy ndarray to bytes."""
-    bytes_io = BytesIO()
-    # WARNING: NEVER set allow_pickle to true.
-    # Reason: loading pickled data can execute arbitrary code
-    # Source: https://numpy.org/doc/stable/reference/generated/numpy.save.html
-    np.save(bytes_io, ndarray, allow_pickle=True)  # type: ignore
-    return bytes_io.getvalue()
 
 
 # Load model and data (Resnet18, CIFAR-10)

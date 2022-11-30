@@ -2,6 +2,8 @@ from typing import Callable, Dict, List, Tuple
 
 import flwr as fl
 from flwr.common import Metrics, Scalar, Config, ndarray_to_bytes
+
+from utility import custom_ndarray_to_bytes
 from strategy import Struct_Prune_Aggregation
 
 import numpy as np
@@ -22,7 +24,7 @@ def get_on_fit_config_fn() -> Callable[[int], Config]:
 
     def fit_config(server_prune_ids: List[int]) -> Config:
         """Return a configuration with static batch size and (local) epochs."""
-        config = {"server_prune_ids": ndarray_to_bytes(np.array(server_prune_ids))}
+        config = {"server_prune_ids": custom_ndarray_to_bytes(np.array(server_prune_ids))}
         print("server", config)
         return config
 
@@ -34,8 +36,7 @@ def get_on_evaluate_config_fn() -> Callable[[int], Config]:
 
     def evaluate_config(server_prune_ids: List[int]) -> Config:
         """Return a configuration with static batch size and (local) epochs."""
-        #server_ndarray = np.ndarray((16,0), buffer=np.array(server_prune_ids))
-        config = {"server_prune_ids": ndarray_to_bytes(np.array(server_prune_ids))}
+        config = {"server_prune_ids": custom_ndarray_to_bytes(np.array(server_prune_ids))}
         return config
 
     return evaluate_config

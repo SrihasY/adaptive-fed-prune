@@ -1,4 +1,3 @@
-from io import BytesIO
 import json
 
 from logging import WARNING, log
@@ -27,17 +26,6 @@ from flwr.server.strategy.aggregate import aggregate
 
 from cifar_resnet import ResNet18
 from prune import prune_model_with_indices
-
-
-#Helper functions
-def custom_bytes_to_ndarray(tensor: bytes) -> NDArray:
-    """Deserialize NumPy ndarray from bytes."""
-    bytes_io = BytesIO(tensor)
-    # WARNING: NEVER set allow_pickle to true.
-    # Reason: loading pickled data can execute arbitrary code
-    # Source: https://numpy.org/doc/stable/reference/generated/numpy.load.html
-    ndarray_deserialized = np.load(bytes_io, allow_pickle=True)  # type: ignore
-    return cast(NDArray, ndarray_deserialized)
 
 
 class Struct_Prune_Aggregation(FedAvg):
