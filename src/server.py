@@ -19,12 +19,12 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     return {"accuracy": sum(accuracies) / sum(examples)}
 
 
-def get_on_fit_config_fn() -> Callable[[int], Config]:
+def get_on_fit_config_fn() -> Callable[[int, List[List[int]]], Config]:
     """Return a function which returns training configurations."""
 
-    def fit_config(server_prune_ids: List[int]) -> Config:
+    def fit_config(server_round:int, server_prune_ids: List[List[int]]) -> Config:
         """Return a configuration with static batch size and (local) epochs."""
-        config = {"server_prune_ids": custom_ndarray_to_bytes(np.array(server_prune_ids))}
+        config = {"server_prune_ids": custom_ndarray_to_bytes(np.array(server_prune_ids, dtype=object)), "server_round":server_round}
         #print("server", config)
         #print(server_prune_ids)
         return config
@@ -32,12 +32,12 @@ def get_on_fit_config_fn() -> Callable[[int], Config]:
     return fit_config
 
 
-def get_on_evaluate_config_fn() -> Callable[[int], Config]:
+def get_on_evaluate_config_fn() -> Callable[[int, List[List[int]]], Config]:
     """Return a function which returns training configurations."""
 
-    def evaluate_config(server_prune_ids: List[int]) -> Config:
+    def evaluate_config(server_round:int, server_prune_ids: List[List[int]]) -> Config:
         """Return a configuration with static batch size and (local) epochs."""
-        config = {"server_prune_ids": custom_ndarray_to_bytes(np.array(server_prune_ids))}
+        config = {"server_prune_ids": custom_ndarray_to_bytes(np.array(server_prune_ids, dtype=object)), "server_round":server_round}
         return config
 
     return evaluate_config

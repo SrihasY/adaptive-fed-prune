@@ -1,3 +1,4 @@
+from bisect import bisect
 import sys, os
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
@@ -87,12 +88,23 @@ def train_model(model, train_loader, test_loader):
 
 
 def prune_model_with_indices(model, indices=[]):
-    if not indices:
+    if len(indices) == 0:
         return model
 
     final_prune_indices = {}
+    prev_indices = {}
     model.cpu()
     DG = tp.DependencyGraph().build_dependency(model, torch.randn(1, 3, 32, 32))
+    for key in model.state_dict().keys():
+        key_list = key.split('.')
+        key = key[:-1*(len(key_list[-1])+1)]
+        if 'conv' in key or 'shortcut.0' in key:
+            final_prune_indices[key + '.in'] = []
+            final_prune_indices[key + '.out'] = []
+        else:
+            final_prune_indices[key] = []
+    for key in final_prune_indices.keys():
+        prev_indices[key] = []
     def prune_conv(conv, amount=0.2, ids = []):
         plan = DG.get_pruning_plan(conv, tp.prune_conv_out_channel, ids)
         for dep, idxs in plan.plan:
@@ -104,17 +116,26 @@ def prune_model_with_indices(model, indices=[]):
                     elif(dep.handler.__class__.__name__ == "ConvInChannelPruner"):
                         key = dep.target._name + '.in'
                 elif 'bn' in dep.target._name or 'shortcut.1' in dep.target._name: #batchnorm layer pruning indices
-                    if(dep.handler.__class__.__name__ == "BatchNormPruner"):
+                    if(dep.handler.__class__.__name__ == "BatchnormPruner"):
                         key = dep.target._name
                 elif 'linear' in dep.target._name:
                     if(dep.handler.__class__.__name__ == "LinearInChannelPruner"): #fully connected layer pruning indices
                         key = dep.target._name
                         
                 if key is not None:
-                    if key in final_prune_indices:
-                        final_prune_indices[key].extend(list(idxs))
-                    else:
-                        final_prune_indices[key] = list(idxs)
+                    inter_prune_ids = list(idxs)
+                    for i in reversed(range(len(prev_indices[key]))):
+                        temp = []
+                        for id in inter_prune_ids:
+                            update_id = id+bisect(prev_indices[key][i], id)
+                            while update_id in prev_indices[key][i] or update_id in temp:
+                                update_id += 1
+                            temp.append(update_id)
+                        inter_prune_ids = temp
+                    inter_prune_ids.sort()
+                    prev_indices[key].append(inter_prune_ids)
+                    final_prune_indices[key].extend(inter_prune_ids)
+                    final_prune_indices[key].sort()
         plan.exec()
 
     block_prune_probs = [0.1, 0.1, 0.2, 0.2, 0.2, 0.2, 0.3, 0.3]
@@ -131,6 +152,7 @@ def prune_model_with_indices(model, indices=[]):
     #remove repeated values, if any
     for key in final_prune_indices.keys():
         layer_indices = list(dict.fromkeys(final_prune_indices[key]))
+        #final_prune_indices[key].sort()
         layer_indices.sort()
         final_prune_indices[key] = layer_indices
     return final_prune_indices
@@ -139,6 +161,18 @@ def prune_model(model):
     model.cpu()
     DG = tp.DependencyGraph().build_dependency(model, torch.randn(1, 3, 32, 32))
     final_prune_indices = {}
+    prev_indices = {}
+    for key in model.state_dict().keys():
+        key_list = key.split('.')
+        key = key[:-1*(len(key_list[-1])+1)]
+        if 'conv' in key or 'shortcut.0' in key:
+            final_prune_indices[key + '.in'] = []
+            final_prune_indices[key + '.out'] = []
+        else:
+            final_prune_indices[key] = []
+            
+    for key in final_prune_indices.keys():
+        prev_indices[key] = []
     def prune_conv(conv, amount=0.2):
         strategy = tp.strategy.L1Strategy()
         ids = strategy(conv.weight, amount=amount)
@@ -152,17 +186,26 @@ def prune_model(model):
                     elif(dep.handler.__class__.__name__ == "ConvInChannelPruner"):
                         key = dep.target._name + '.in'
                 elif 'bn' in dep.target._name or 'shortcut.1' in dep.target._name: #batchnorm layer pruning indices
-                    if(dep.handler.__class__.__name__ == "BatchNormPruner"):
+                    if(dep.handler.__class__.__name__ == "BatchnormPruner"):
                         key = dep.target._name
                 elif 'linear' in dep.target._name:
                     if(dep.handler.__class__.__name__ == "LinearInChannelPruner"): #fully connected layer pruning indices
                         key = dep.target._name
                         
                 if key is not None:
-                    if key in final_prune_indices:
-                        final_prune_indices[key].extend(list(idxs))
-                    else:
-                        final_prune_indices[key] = list(idxs)
+                    inter_prune_ids = list(idxs)
+                    for i in reversed(range(len(prev_indices[key]))):
+                        temp = []
+                        for id in inter_prune_ids:
+                            update_id = id+bisect(prev_indices[key][i], id)
+                            while update_id in prev_indices[key][i] or update_id in temp:
+                                update_id += 1
+                            temp.append(update_id)
+                        inter_prune_ids = temp
+                    inter_prune_ids.sort()
+                    prev_indices[key].append(inter_prune_ids)
+                    final_prune_indices[key].extend(inter_prune_ids)
+                    final_prune_indices[key].sort()
         plan.exec()
 
     block_prune_probs = [0.1, 0.1, 0.2, 0.2, 0.2, 0.2, 0.3, 0.3]

@@ -9,7 +9,7 @@ from collections import OrderedDict
 import flwr as fl
 import torch
 import torch.nn.functional as F
-from flwr.common import bytes_to_ndarray
+from utility import custom_bytes_to_ndarray, custom_ndarray_to_bytes
 from torchvision import transforms
 from torchvision.datasets import CIFAR10
 from tqdm import tqdm
@@ -102,13 +102,12 @@ class FlowerClient(fl.client.NumPyClient):
         state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
         central_net.load_state_dict(state_dict, strict=True)
 
-    #TODO: parameters are being updated twice
     def fit(self, parameters, config):
-        #print("test")
-        server_prune_ids = bytes_to_ndarray(config['server_prune_ids']).tolist()
-        print(server_prune_ids)
-        prune_model_with_indices(central_net, server_prune_ids)
-        self.set_parameters(parameters)
+        if config['server_round'] == 0:
+            #server_prune_ids = custom_bytes_to_ndarray(config['server_prune_ids']).tolist()
+            #print(server_prune_ids)
+            #prune_model_with_indices(central_net, server_prune_ids)
+            self.set_parameters(parameters)
         net = central_net
         train_model(net, trainloader)
         prune_indices = prune_model(net)
@@ -117,7 +116,7 @@ class FlowerClient(fl.client.NumPyClient):
         return self.get_parameters(config={}), len(trainloader.dataset), pruned_index_dict
 
     def evaluate(self, parameters, config):
-        server_prune_ids = bytes_to_ndarray(config['server_prune_ids'])
+        server_prune_ids = custom_bytes_to_ndarray(config['server_prune_ids'])
         prune_model_with_indices(central_net, server_prune_ids)
         self.set_parameters(parameters)
         loss, accuracy = eval(central_net, testloader)
