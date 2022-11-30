@@ -25,7 +25,8 @@ def get_on_fit_config_fn() -> Callable[[int], Config]:
     def fit_config(server_prune_ids: List[int]) -> Config:
         """Return a configuration with static batch size and (local) epochs."""
         config = {"server_prune_ids": custom_ndarray_to_bytes(np.array(server_prune_ids))}
-        print("server", config)
+        #print("server", config)
+        #print(server_prune_ids)
         return config
 
     return fit_config
