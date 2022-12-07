@@ -1,22 +1,22 @@
 import argparse
-import copy
+import io
 import json
 import math
 import os
 import sys
 import warnings
-from collections import OrderedDict
 
 import flwr as fl
 import torch
 import torch.nn.functional as F
-from utility import custom_bytes_to_ndarray, custom_ndarray_to_bytes
+from flwr.common import (Code, EvaluateIns, EvaluateRes, FitIns, FitRes,
+                         GetParametersIns, GetParametersRes, Status,
+                         ndarrays_to_parameters)
+from prune import prune_model
 from torchvision import transforms
 from torchvision.datasets import CIFAR10
 from tqdm import tqdm
-
-from cifar_resnet import ResNet18
-from prune import prune_model, prune_model_with_indices
+from utility import custom_ndarray_to_bytes
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
 
@@ -26,6 +26,7 @@ parser.add_argument('--total_epochs', type=int, default=1)
 parser.add_argument('--step_size', type=int, default=70)
 parser.add_argument('--client_index', type=int, default=0)
 parser.add_argument('--num_clients', type=int)
+parser.add_argument('--serv_addr', type=str)
 args = parser.parse_args()
 
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -40,8 +41,8 @@ def get_dataloader():
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
         ]), download=True)
-    client_split = torch.utils.data.Subset(trainset, list(range(math.floor(len(trainset)*args.client_index/(10*args.num_clients)),
-                     math.floor(len(trainset)*(args.client_index+1)/(10*args.num_clients)))))
+    client_split = torch.utils.data.Subset(trainset, list(range(math.floor(len(trainset)*args.client_index/(args.num_clients)),
+                     math.floor(len(trainset)*(args.client_index+1)/(args.num_clients)))))
     train_loader = torch.utils.data.DataLoader(client_split,
                         batch_size=args.batch_size, num_workers=2)
     test_loader = torch.utils.data.DataLoader(
@@ -73,6 +74,7 @@ def eval(model, test_loader):
     total = 0
     loss = 0.0
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #print(model)
     model.to(device)
     model.eval()
     with torch.no_grad():
@@ -88,47 +90,55 @@ def eval(model, test_loader):
 
 
 # Load model and data (Resnet18, CIFAR-10)
-central_net = torch.load('resnet18-round3.pth', map_location="cuda" if torch.cuda.is_available() else "cpu")
-net = copy.deepcopy(central_net)
+net = None
 trainloader, testloader = get_dataloader()
 network_parameter = 1  # to be used for scaling in the array
 
+status = Status(code=Code.OK, message="Success")
+
 # Define Flower client
-class FlowerClient(fl.client.NumPyClient):
-    def get_parameters(self, config):
-        return [val.cpu().numpy() for _, val in net.state_dict().items()]
+class FlowerClient(fl.client.Client):
+    def get_parameters(self, ins: GetParametersIns) -> GetParametersRes:
+        global net
+        ndarrays = [val.cpu().numpy() for _, val in net.state_dict().items()]
+        parameters = ndarrays_to_parameters(ndarrays)
+        return GetParametersRes(status=status, parameters=parameters)
 
-    def set_parameters(self, parameters):
-        params_dict = zip(central_net.state_dict().keys(), parameters)
-        state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
-        central_net.load_state_dict(state_dict, strict=True)
+    # def set_parameters(self, parameters):
+    #     params_dict = zip(net.state_dict().keys(), parameters)
+    #     state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
+    #     net.load_state_dict(state_dict, strict=True)
 
-    def fit(self, parameters, config):
-        print(config['server_round'])
-        if config['server_round'] == 1:
-            #server_prune_ids = custom_bytes_to_ndarray(config['server_prune_ids']).tolist()
-            #print(server_prune_ids)
-            #prune_model_with_indices(central_net, server_prune_ids)
-            self.set_parameters(parameters)
-        net = copy.deepcopy(central_net)
+    def fit(self, ins: FitIns) -> FitRes:
+        global net
+        #deserialize model sent by server
+        server_model_bytes = ins.parameters.tensors[0]
+        #update client model
+        net = torch.load(io.BytesIO(server_model_bytes), map_location="cuda" if torch.cuda.is_available() else "cpu")
         train_model(net, trainloader)
         conv_prune_indices, prune_indices = prune_model(net)
-        print("client pruned ", conv_prune_indices)
         prune_indices = json.dumps(prune_indices).encode('utf-8')
         conv_prune_indices = custom_ndarray_to_bytes(conv_prune_indices)
         pruned_index_dict = {"prune_indices": prune_indices, "conv_prune_indices": conv_prune_indices}
-        return self.get_parameters(config={}), len(trainloader.dataset), pruned_index_dict
+        paramresults = self.get_parameters(GetParametersIns(None))
+        fitresults = FitRes(status=paramresults.status, parameters=paramresults.parameters, num_examples=len(trainloader.dataset), metrics=pruned_index_dict)
+        return fitresults
 
-    def evaluate(self, parameters, config):
-        server_prune_ids = custom_bytes_to_ndarray(config['server_prune_ids'])
-        prune_model_with_indices(central_net, server_prune_ids)
-        self.set_parameters(parameters)
-        loss, accuracy = eval(central_net, testloader)
-        return loss, len(testloader.dataset), {"accuracy": accuracy}
+    def evaluate(self, ins: EvaluateIns) -> EvaluateRes:
+        global net
+        #deserialize model sent by server
+        server_model_bytes = ins.parameters.tensors[0]
+        #update client model
+        net = torch.load(io.BytesIO(server_model_bytes), map_location="cuda" if torch.cuda.is_available() else "cpu")      
+        #do we train?  
+        train_model(net, trainloader)
+        loss, accuracy = eval(net, testloader)
+        #print(loss, accuracy)
+        return EvaluateRes(status=status, loss=loss, num_examples=len(testloader.dataset), metrics={"accuracy": accuracy})
 
 
 # Start Flower client
-fl.client.start_numpy_client(
-    server_address="127.0.0.1:9000",
+fl.client.start_client(
+    server_address=args.serv_addr,
     client=FlowerClient(),
 )

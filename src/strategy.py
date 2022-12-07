@@ -1,35 +1,18 @@
-from collections import OrderedDict
-from io import BytesIO
+import io
 import json
-
-from logging import WARNING, log
-from bisect import bisect
-from typing import Callable, Dict, List, Optional, Tuple, Union, cast
-import numpy as np
 import re
+from bisect import bisect
+from collections import OrderedDict
+from logging import WARNING, log
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
-from flwr.server.strategy import FedAvg
-
+import numpy as np
+import torch
+from flwr.common import (EvaluateIns, FitIns, FitRes, MetricsAggregationFn,
+                         NDArray, Parameters, Scalar, parameters_to_ndarrays)
 from flwr.server.client_manager import ClientManager
 from flwr.server.client_proxy import ClientProxy
-
-from flwr.common import (
-    EvaluateIns,
-    EvaluateRes,
-    FitIns,
-    FitRes,
-    MetricsAggregationFn,
-    NDArray,
-    NDArrays,
-    Parameters,
-    Scalar,
-    ndarrays_to_parameters,
-    parameters_to_ndarrays
-)
-from flwr.server.strategy.aggregate import aggregate
-import torch
-
-from cifar_resnet import ResNet18
+from flwr.server.strategy import FedAvg
 from prune import prune_model_with_indices
 from utility import custom_bytes_to_ndarray
 
@@ -40,31 +23,37 @@ class Struct_Prune_Aggregation(FedAvg):
                  on_fit_config_fn: Optional[Callable[[int, List[List[int]]], Dict[str, NDArray]]] = None,
                  on_evaluate_config_fn: Optional[Callable[[int, List[List[int]]], Dict[str, NDArray]]] = None,
                  evaluate_metrics_aggregation_fn: Optional[MetricsAggregationFn] = None,
+                 initial_parameters: Parameters = None,
+                 tot_clients: int = 2,
+                 sample_clients: int = 2,
                  ) -> None:
-        super().__init__(evaluate_metrics_aggregation_fn=evaluate_metrics_aggregation_fn)
+        super().__init__(evaluate_metrics_aggregation_fn=evaluate_metrics_aggregation_fn, initial_parameters=initial_parameters, \
+                         min_available_clients=tot_clients, min_evaluate_clients=sample_clients, min_fit_clients=sample_clients)
         self.server_prune_ids = [[]]*16
         self.on_fit_config_fn = on_fit_config_fn
         self.on_evaluate_config_fn = on_evaluate_config_fn
-        self.central_parameters = self.initial_parameters
         self.aggregate_frac = 1
-        self.server_net = torch.load('resnet18-round3.pth', map_location="cuda" if torch.cuda.is_available() else "cpu")
+        init_model_bytes = initial_parameters.tensors[0]
+        #update client model
+        self.server_net = torch.load(io.BytesIO(init_model_bytes), map_location="cuda" if torch.cuda.is_available() else "cpu")
+        
 
     def configure_fit(
             self, server_round: int, parameters: Parameters, client_manager: ClientManager
     ) -> List[Tuple[ClientProxy, FitIns]]:
         """Configure the next round of training."""
         #update server weights
-        self.central_parameters = parameters_to_ndarrays(parameters)
-        params_dict = zip(self.server_net.state_dict().keys(), self.central_parameters)
-        state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
-        self.server_net.load_state_dict(state_dict, strict=True)
+        # self.central_parameters = parameters_to_ndarrays(parameters)
+        # params_dict = zip(self.server_net.state_dict().keys(), self.central_parameters)
+        # state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
+        # self.server_net.load_state_dict(state_dict, strict=True)
         
         config = {}
         if self.on_fit_config_fn is not None:
             # Custom fit config function provided
             config = self.on_fit_config_fn(server_round, self.server_prune_ids)
-        test = custom_bytes_to_ndarray(config['server_prune_ids']).tolist()
-        print("initial server prune ids: ", test)
+        # test = custom_bytes_to_ndarray(config['server_prune_ids']).tolist()
+        # print("initial server prune ids: ", test)
         fit_ins = FitIns(parameters, config)
 
         #print(fit_ins)
@@ -120,8 +109,7 @@ class Struct_Prune_Aggregation(FedAvg):
 
         # Convert results
         client_parameters = [parameters_to_ndarrays(fit_res.parameters) for _, fit_res in results]
-
-        server_parameters = self.central_parameters
+        server_parameters = [val.cpu().numpy() for _, val in self.server_net.state_dict().items()]
 
         client_metrics = [json.loads(res.metrics['prune_indices'].decode('utf-8')) for _, res in results]
         client_conv_metrics = [custom_bytes_to_ndarray(res.metrics['conv_prune_indices']) for _, res in results]
@@ -152,18 +140,32 @@ class Struct_Prune_Aggregation(FedAvg):
         self.server_prune_ids = server_prune_ids
         final_server_prune_indices = prune_model_with_indices(self.server_net, server_prune_ids)
         pruned_parameters = [val.cpu().numpy() for _, val in self.server_net.state_dict().items()]
-        
+        # for index, key in enumerate(model_dict):
+        #     key_list = key.split('.')
+        #     key = key[:-1*len(key_list[-1])]
+        #     num_out_channels = (server_parameters[index]).shape[0]
+        #     #num_in_channels = (server_parameters[index]).shape[1]
+        #     if re.match("^conv[1-2]+$", key_list[-2]) or ('shortcut.0' in key):
+        #         out_key = key + "out"
+        #         in_key = key + "in"
+        #         print(len(final_server_prune_indices[out_key]), pruned_parameters[index].shape, num_out_channels)
+        #         #print(len(final_server_prune_indices[in_key]), pruned_parameters[index].shape, num_in_channels)
+        #     elif 'bn' in key or 'shortcut.1' in key:
+        #         if key_list[-1] != 'num_batches_tracked':
+        #             key = key[:-1]
+        #         print(len(final_server_prune_indices[key]), pruned_parameters[index].shape, num_out_channels)
+
         for array in pruned_parameters:
             array.fill(0)
     
         for index, key in enumerate(model_dict):
             key_list = key.split('.')
             key = key[:-1*len(key_list[-1])]
-            if re.match("^conv[1-2]+$", key_list[-2]) or ('shortcut.0' in key):
-                out_key = key + "out"
-                in_key = key + "in"
+            if ('conv' in key) or ('shortcut.0' in key):
                 num_out_channels = (server_parameters[index]).shape[0]
                 num_in_channels = (server_parameters[index]).shape[1]
+                out_key = key + "out"
+                in_key = key + "in"
                 for out_channel in range(num_out_channels):
                     if out_channel in final_server_prune_indices[out_key]:
                         continue #server dropped output channel
@@ -211,10 +213,16 @@ class Struct_Prune_Aggregation(FedAvg):
                         pruned_parameters[index] = pruned_parameters[index] + client_parameters[client_idx][index]
                         tot_channel_examples += num_examples[client_idx]
                     pruned_parameters[index] = pruned_parameters[index]/tot_channel_examples
-    
+
         params_dict = zip(self.server_net.state_dict().keys(), pruned_parameters)
         pruned_state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
         self.server_net.load_state_dict(pruned_state_dict, strict=True)
+        file_path = "server_models/server_model" + str(server_round) + ".pth"
+        torch.save(self.server_net, file_path)
+        
+        with open(file_path, mode="rb") as server_model_file:
+            server_model = [server_model_file.read()]
+        
         self.central_parameters = pruned_parameters
                         
         # Aggregate custom metrics if aggregation fn was provided
@@ -225,7 +233,7 @@ class Struct_Prune_Aggregation(FedAvg):
         elif server_round == 1:  # Only log this warning once
             log(WARNING, "No fit_metrics_aggregation_fn provided")
 
-        return ndarrays_to_parameters(pruned_parameters), metrics_aggregated # To be changed
+        return Parameters(tensors=server_model, tensor_type='bytes'), metrics_aggregated # To be changed
 
     # Might need for client personalized model evaluation.
     # def aggregate_evaluate(self, server_round, results, failures):
@@ -237,4 +245,5 @@ def get_index(in_key, out_key, in_channel, out_channel, dict):
     else:
         in_offset = bisect(dict[in_key], in_channel)
         out_offset = bisect(dict[out_key], out_channel)
+        #print(in_channel, out_channel, in_offset, out_offset, dict[in_key], dict[out_key])
         return out_channel - out_offset, in_channel - in_offset

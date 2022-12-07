@@ -1,14 +1,23 @@
-from typing import Callable, Dict, List, Tuple
+import argparse
+from typing import List, Tuple
 
 import flwr as fl
-from flwr.common import Metrics, Scalar, Config, ndarray_to_bytes
-
-from utility import custom_ndarray_to_bytes
+from flwr.common import Metrics, Parameters
 from strategy import Struct_Prune_Aggregation
 
-import numpy as np
+parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser()
+parser.add_argument('--tot_clients', type=int)
+parser.add_argument('--sample_clients', type=int)
+parser.add_argument('--serv_addr', type=str)
+parser.add_argument('--init_model', type=str)
+args = parser.parse_args()
 
-
+#set initial global model
+init_params = None
+with open(args.init_model, mode="rb") as init_model_file:
+    init_params = Parameters(tensors = [init_model_file.read()], tensor_type='bytes')
+    
 # Define metric aggregation function
 def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     # Multiply accuracy of each client by number of examples used
@@ -18,39 +27,13 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     # Aggregate and return custom metric (weighted average)
     return {"accuracy": sum(accuracies) / sum(examples)}
 
-
-def get_on_fit_config_fn() -> Callable[[int, List[List[int]]], Config]:
-    """Return a function which returns training configurations."""
-
-    def fit_config(server_round:int, server_prune_ids: List[List[int]]) -> Config:
-        """Return a configuration with static batch size and (local) epochs."""
-        config = {"server_prune_ids": custom_ndarray_to_bytes(np.array(server_prune_ids, dtype=object)), "server_round":server_round}
-        #print("server", config)
-        #print(server_prune_ids)
-        return config
-
-    return fit_config
-
-
-def get_on_evaluate_config_fn() -> Callable[[int, List[List[int]]], Config]:
-    """Return a function which returns training configurations."""
-
-    def evaluate_config(server_round:int, server_prune_ids: List[List[int]]) -> Config:
-        """Return a configuration with static batch size and (local) epochs."""
-        config = {"server_prune_ids": custom_ndarray_to_bytes(np.array(server_prune_ids, dtype=object)), "server_round":server_round}
-        return config
-
-    return evaluate_config
-
-
 # Define strategy
-strategy = Struct_Prune_Aggregation(on_fit_config_fn=get_on_fit_config_fn(),
-                                    on_evaluate_config_fn=get_on_evaluate_config_fn(),
-                                    evaluate_metrics_aggregation_fn=weighted_average)
+strategy = Struct_Prune_Aggregation(evaluate_metrics_aggregation_fn=weighted_average, initial_parameters=init_params,
+                                    tot_clients = args.tot_clients, sample_clients = args.sample_clients)
 
 # Start Flower server
 fl.server.start_server(
-    server_address="127.0.0.1:9000",
+    server_address=args.serv_addr,
     config=fl.server.ServerConfig(num_rounds=3),
     strategy=strategy,
 )

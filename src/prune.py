@@ -1,19 +1,17 @@
+import os
+import sys
 from bisect import bisect
-import sys, os
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
 
-from cifar_resnet import ResNet18
 import cifar_resnet as resnet
-
-import torch_pruning as tp
-import argparse
-import torch
-from torchvision.datasets import CIFAR10
-from torchvision import transforms
-import torch.nn.functional as F
-import torch.nn as nn
 import numpy as np
+import torch
+import torch.nn.functional as F
+import torch_pruning as tp
+from cifar_resnet import ResNet18
+from torchvision import transforms
+from torchvision.datasets import CIFAR10
 
 # parser = argparse.ArgumentParser()
 # parser.add_argument('--mode', type=str, required=True, choices=['train', 'prune', 'test'])
@@ -213,6 +211,7 @@ def prune_model(model):
         plan.exec()
 
     block_prune_probs = [0.1, 0.1, 0.2, 0.2, 0.2, 0.2, 0.3, 0.3]
+    block_prune_probs = [0.5*x for x in block_prune_probs]
     blk_id = 0
     for m in model.modules():
         if isinstance(m, resnet.BasicBlock):
