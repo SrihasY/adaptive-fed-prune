@@ -3,3 +3,4 @@ src/__pycache__
 .vscode
 data/
 src/test.txt
+src/server_models/*

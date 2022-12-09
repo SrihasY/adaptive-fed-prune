@@ -6,6 +6,7 @@ cd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"/
 SERV_ADDR="0.0.0.0:9001"
 BATCH_SIZE=64
 PER_TRAIN_EPOCHS=1
+PRUNING_FACTOR=1
 LR_STEP_SIZE=20
 TOT_CLIENTS=0
 START_CLIENT_INDEX=0
@@ -21,7 +22,7 @@ python -c "from torchvision.datasets import CIFAR10; CIFAR10('./data', download=
 
 for ((i=START_CLIENT_INDEX;i<END_CLIENT_INDEX;i++)); do
     echo "Starting client $i"
-    python client.py --batch_size $BATCH_SIZE --total_epochs $PER_TRAIN_EPOCHS --step_size $LR_STEP_SIZE \
+    python client.py --batch_size $BATCH_SIZE --total_epochs $PER_TRAIN_EPOCHS --step_size $LR_STEP_SIZE --prune_factor $PRUNING_FACTOR \
                         --client_index $i --num_clients $TOT_CLIENTS \
                         --serv_addr $SERV_ADDR &
 done

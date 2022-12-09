@@ -157,7 +157,7 @@ def prune_model_with_indices(model, indices=[]):
         final_prune_indices[key] = layer_indices
     return final_prune_indices
 
-def prune_model(model):
+def prune_model(model, prune_factor):
     model.cpu()
     DG = tp.DependencyGraph().build_dependency(model, torch.randn(1, 3, 32, 32))
     conv_prune_indices = []
@@ -211,7 +211,8 @@ def prune_model(model):
         plan.exec()
 
     block_prune_probs = [0.1, 0.1, 0.2, 0.2, 0.2, 0.2, 0.3, 0.3]
-    block_prune_probs = [0.5*x for x in block_prune_probs]
+    #scale pruning based on pruning factor
+    block_prune_probs = [float(prune_factor)*x for x in block_prune_probs]
     blk_id = 0
     for m in model.modules():
         if isinstance(m, resnet.BasicBlock):

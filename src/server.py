@@ -11,6 +11,8 @@ parser.add_argument('--tot_clients', type=int)
 parser.add_argument('--sample_clients', type=int)
 parser.add_argument('--serv_addr', type=str)
 parser.add_argument('--init_model', type=str)
+parser.add_argument('--server_rounds', type=int)
+parser.add_argument('--agg_fraction', type=float)
 args = parser.parse_args()
 
 #set initial global model
@@ -34,6 +36,6 @@ strategy = Struct_Prune_Aggregation(evaluate_metrics_aggregation_fn=weighted_ave
 # Start Flower server
 fl.server.start_server(
     server_address=args.serv_addr,
-    config=fl.server.ServerConfig(num_rounds=3),
+    config=fl.server.ServerConfig(num_rounds=args.server_rounds),
     strategy=strategy,
 )

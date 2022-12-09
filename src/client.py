@@ -27,6 +27,7 @@ parser.add_argument('--step_size', type=int, default=70)
 parser.add_argument('--client_index', type=int, default=0)
 parser.add_argument('--num_clients', type=int)
 parser.add_argument('--serv_addr', type=str)
+parser.add_argument('--prune_factor', type=float)
 args = parser.parse_args()
 
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -116,7 +117,7 @@ class FlowerClient(fl.client.Client):
         #update client model
         net = torch.load(io.BytesIO(server_model_bytes), map_location="cuda" if torch.cuda.is_available() else "cpu")
         train_model(net, trainloader)
-        conv_prune_indices, prune_indices = prune_model(net)
+        conv_prune_indices, prune_indices = prune_model(net, args.prune_factor)
         prune_indices = json.dumps(prune_indices).encode('utf-8')
         conv_prune_indices = custom_ndarray_to_bytes(conv_prune_indices)
         pruned_index_dict = {"prune_indices": prune_indices, "conv_prune_indices": conv_prune_indices}
