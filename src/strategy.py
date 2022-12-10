@@ -26,6 +26,7 @@ class Struct_Prune_Aggregation(FedAvg):
                  initial_parameters: Parameters = None,
                  tot_clients: int = 2,
                  sample_clients: int = 2,
+                 stop_prune: int = 100
                  ) -> None:
         super().__init__(evaluate_metrics_aggregation_fn=evaluate_metrics_aggregation_fn, initial_parameters=initial_parameters, \
                          min_available_clients=tot_clients, min_evaluate_clients=sample_clients, min_fit_clients=sample_clients)
@@ -36,7 +37,7 @@ class Struct_Prune_Aggregation(FedAvg):
         init_model_bytes = initial_parameters.tensors[0]
         #update client model
         self.server_net = torch.load(io.BytesIO(init_model_bytes), map_location="cuda" if torch.cuda.is_available() else "cpu")
-        
+        self.stop_prune = stop_prune
 
     def configure_fit(
             self, server_round: int, parameters: Parameters, client_manager: ClientManager
@@ -119,22 +120,25 @@ class Struct_Prune_Aggregation(FedAvg):
         server_prune_ids = []
         tot_examples = np.sum(num_examples)
 
-        for index, key in enumerate(model_dict):
-            key_list = key.split('.')
-            key = key[:-1*len(key_list[-1])]
-            if re.match("^conv[1-2]+$", key_list[-2]) and key != 'conv1.':
-                key = key + "out"
-                num_channels = (server_parameters[index]).shape[0]
-                cardinalities = []
-                for channel_idx in range(num_channels):
-                    channel_cardinality = 0
-                    for client_idx, client in enumerate(client_conv_metrics):
-                        prune_ids = client[len(server_prune_ids)]
-                        if channel_idx in prune_ids:
-                            channel_cardinality += num_examples[client_idx]
-                    cardinalities.append(channel_cardinality)
-                server_prune_ids.append([channel_idx for channel_idx, x in enumerate(cardinalities) if
-                                         x >= self.aggregate_frac * tot_examples])
+        if server_round <= self.stop_prune:
+            for index, key in enumerate(model_dict):
+                key_list = key.split('.')
+                key = key[:-1*len(key_list[-1])]
+                if re.match("^conv[1-2]+$", key_list[-2]) and key != 'conv1.':
+                    key = key + "out"
+                    num_channels = (server_parameters[index]).shape[0]
+                    cardinalities = []
+                    for channel_idx in range(num_channels):
+                        channel_cardinality = 0
+                        for client_idx, client in enumerate(client_conv_metrics):
+                            prune_ids = client[len(server_prune_ids)]
+                            if channel_idx in prune_ids:
+                                channel_cardinality += num_examples[client_idx]
+                        cardinalities.append(channel_cardinality)
+                    server_prune_ids.append([channel_idx for channel_idx, x in enumerate(cardinalities) if
+                                            x >= self.aggregate_frac * tot_examples])
+        else:
+            server_prune_ids = [[]]*len(client_conv_metrics[0])
         print("Printing the aggregated indexes.")
         print(server_prune_ids)
         self.server_prune_ids = server_prune_ids

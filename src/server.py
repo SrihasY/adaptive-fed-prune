@@ -12,6 +12,7 @@ parser.add_argument('--sample_clients', type=int)
 parser.add_argument('--serv_addr', type=str)
 parser.add_argument('--init_model', type=str)
 parser.add_argument('--server_rounds', type=int)
+parser.add_argument('--stop_prune', type=int)
 parser.add_argument('--agg_fraction', type=float)
 args = parser.parse_args()
 
@@ -26,12 +27,14 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
     examples = [num_examples for num_examples, _ in metrics]
 
+    print("accuracy: ", sum(accuracies)/sum(examples))
     # Aggregate and return custom metric (weighted average)
     return {"accuracy": sum(accuracies) / sum(examples)}
 
 # Define strategy
 strategy = Struct_Prune_Aggregation(evaluate_metrics_aggregation_fn=weighted_average, initial_parameters=init_params,
-                                    tot_clients = args.tot_clients, sample_clients = args.sample_clients)
+                                    tot_clients = args.tot_clients, sample_clients = args.sample_clients,
+                                    stop_prune=args.stop_prune)
 
 # Start Flower server
 fl.server.start_server(
