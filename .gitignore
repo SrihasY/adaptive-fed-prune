@@ -4,3 +4,6 @@ src/__pycache__
 data/
 src/test.txt
 src/server_models/*.pth
+examples/8clients/server_models/*.pth
+examples/8clients/__pycache__
+examples/8clients/data

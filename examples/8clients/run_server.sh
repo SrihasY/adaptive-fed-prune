@@ -1,21 +1,21 @@
 #!/bin/bash
 set -e
 cd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"/
-
+INIT_MODEL_FILE="../models/resnet18-round3.pth"
 #Config variables
 SERV_ADDR="0.0.0.0:9001"
-SERVER_ROUNDS=3
-STOP_PRUNE_ROUND=4
+SERVER_ROUNDS=5
+STOP_PRUNE_ROUND=6
 AGG_FRAC=1
 BATCH_SIZE=64
 PER_TRAIN_EPOCHS=3
 PRUNING_FACTOR=1
 LR_STEP_SIZE=20
-TOT_CLIENTS=2
-SAMPLE_CLIENTS=2
+TOT_CLIENTS=8
+SAMPLE_CLIENTS=8
 START_CLIENT_INDEX=0
 END_CLIENT_INDEX=2
-INIT_MODEL_FILE="../models/resnet18-round3.pth"
+INIT_MODEL_FILE="../../models/resnet18-round3.pth"
 # Download the CIFAR-10 dataset
 python -c "from torchvision.datasets import CIFAR10; CIFAR10('./data', download=True)"
 

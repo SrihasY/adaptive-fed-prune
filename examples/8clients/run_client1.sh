@@ -4,26 +4,21 @@ cd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"/
 
 #Config variables
 SERV_ADDR="0.0.0.0:9001"
-SERVER_ROUNDS=3
-STOP_PRUNE_ROUND=4
-AGG_FRAC=1
 BATCH_SIZE=64
 PER_TRAIN_EPOCHS=3
-PRUNING_FACTOR=1
+PRUNING_FACTOR=0.75
 LR_STEP_SIZE=20
-TOT_CLIENTS=2
-SAMPLE_CLIENTS=2
-START_CLIENT_INDEX=0
-END_CLIENT_INDEX=2
-INIT_MODEL_FILE="../models/resnet18-round3.pth"
+TOT_CLIENTS=8
+START_CLIENT_INDEX=2
+END_CLIENT_INDEX=6
 # Download the CIFAR-10 dataset
 python -c "from torchvision.datasets import CIFAR10; CIFAR10('./data', download=True)"
 
-echo "Starting server"
-python server.py --serv_addr $SERV_ADDR --server_rounds $SERVER_ROUNDS --stop_prune $STOP_PRUNE_ROUND \
-                    --init_model $INIT_MODEL_FILE --agg_fraction $AGG_FRAC\
-                    --tot_clients $TOT_CLIENTS --sample_clients $SAMPLE_CLIENTS &
-sleep 3 # Sleep for 3s to give the server enough time to start
+# echo "Starting server"
+# python server.py --serv_addr $SERV_ADDR \
+#                     --init_model $INIT_MODEL_FILE \
+#                     --tot_clients $TOT_CLIENTS --sample_clients $SAMPLE_CLIENTS &
+# sleep 3 # Sleep for 3s to give the server enough time to start
 
 for ((i=START_CLIENT_INDEX;i<END_CLIENT_INDEX;i++)); do
     echo "Starting client $i"

@@ -1,15 +1,28 @@
 Flower-based implementation of federated learning using ResNet18 on CIFAR-10.
 
-Install requirements using pip install -r requirements.txt
-Run using ./run.sh (Spawns 1 server, 2 clients)
+Steps to run -
 
-Current simplifications -
-1. Only 1/10th of the trainig set is used to keep training times small on local machines. Can be edited in client.py -> get_dataloader(). The training data is also not shuffled for splitting (to be changed).
-2. Model is trained from scratch instead of starting from a stored instance. Change incoming.
+1. Create a virtual environment using venv in the repo directory
+    python -m venv sysmlvenv/
 
-Client Parameters (can be changed using command line arguments to a client instance started using python client.py):
-1. --batch_size: batch size for gradient descent
-2. --total_epochs: epochs per round of FL at each client
-3. --step_size: learning rate scheduler step size
-4. --client_index: index of the client used to partition the training set
-5. --num_clients: total number of FL clients, used for partitioning
+2. Activate the venv using source sysmlvenv/bin/activate
+
+3. Install requirements using pip install -r requirements.txt
+
+4. Cd into src. Run using ./run.sh (Spawns 1 server, 2 clients)
+
+*Running the 8 Client Example*
+
+1. Cd into examples/8clients (with the same env activated)
+
+2. To see network log output, in a terminal window type the following-
+sudo -E env PATH=$PATH python network.py --serv_addr 0.0.0.0:9001
+The final network usage will be printed when this process is killed. Every packet transferred will be logged.
+
+3. In separate terminals, execute the following scripts in order-
+./run_server.sh
+(Wait till the first two clients spawn)
+./run_client1.sh
+./run_client2.sh
+
+Each script corresponds to a group of clients, whose output will appear in each terminal window. run_server.sh also shows the server output.
