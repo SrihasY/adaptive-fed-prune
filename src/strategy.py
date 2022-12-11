@@ -26,14 +26,15 @@ class Struct_Prune_Aggregation(FedAvg):
                  initial_parameters: Parameters = None,
                  tot_clients: int = 2,
                  sample_clients: int = 2,
-                 stop_prune: int = 100
+                 stop_prune: int = 100,
+                 agg_frac: float = 1
                  ) -> None:
         super().__init__(evaluate_metrics_aggregation_fn=evaluate_metrics_aggregation_fn, initial_parameters=initial_parameters, \
                          min_available_clients=tot_clients, min_evaluate_clients=sample_clients, min_fit_clients=sample_clients)
         self.server_prune_ids = [[]]*16
         self.on_fit_config_fn = on_fit_config_fn
         self.on_evaluate_config_fn = on_evaluate_config_fn
-        self.aggregate_frac = 1
+        self.aggregate_frac = agg_frac
         init_model_bytes = initial_parameters.tensors[0]
         #update client model
         self.server_net = torch.load(io.BytesIO(init_model_bytes), map_location="cuda" if torch.cuda.is_available() else "cpu")

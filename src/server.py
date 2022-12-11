@@ -34,7 +34,7 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
 # Define strategy
 strategy = Struct_Prune_Aggregation(evaluate_metrics_aggregation_fn=weighted_average, initial_parameters=init_params,
                                     tot_clients = args.tot_clients, sample_clients = args.sample_clients,
-                                    stop_prune=args.stop_prune)
+                                    stop_prune=args.stop_prune, agg_frac=args.agg_fraction)
 
 # Start Flower server
 fl.server.start_server(
