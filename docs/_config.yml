@@ -20,7 +20,7 @@
 
 title: Adaptive Pruning & Structural Aggregation in Federated Learning
 description: >- # this means to ignore newlines until "baseurl:"
-  A dynamic federated pruning implementation, with per-client adjustable pruning factors to accommodate low-resource devices and mitigate stragglers.
+  An adaptive federated pruning implementation, with per-client adjustable pruning factors to accommodate low-resource devices and mitigate stragglers.
 baseurl: "/" # the subpath of your site, e.g. /blog
 url: "https://srihasy.github.io/dynamic-fed-prune" # the base hostname & protocol for your site, e.g. http://example.com
 
