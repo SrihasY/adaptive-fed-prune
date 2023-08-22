@@ -1,4 +1,4 @@
-Flower-based implementation of federated learning using ResNet18 on CIFAR-10. Implements dynamic pruning strategy, which allows clients to select a degree of pruning based on resource limitations (RAM, network bandwidth etc.).
+Flower-based implementation of federated learning using ResNet18 on CIFAR-10. Implements an adaptive pruning strategy, which allows clients to select a degree of pruning based on resource limitations (RAM, network bandwidth etc.).
 
 Done as part of a group project for the CS8803 Systems for Machine Learning, Fall 2022.
 
