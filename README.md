@@ -1,6 +1,16 @@
-Flower-based implementation of federated learning using ResNet18 on CIFAR-10.
+Flower-based implementation of federated learning using ResNet18 on CIFAR-10. Implements dynamic pruning strategy, which allows clients to select a degree of pruning based on resource limitations (RAM, network bandwidth etc.).
 
-Steps to run -
+Done as part of a group project for the CS8803 Systems for Machine Learning, Fall 2022.
+
+### Team members
+Srihas Yarlagadda - syarlagadda37@gatech.edu  
+Vidushi Vashisth - vvashishth3@gatech.edu  
+Aniruddha Mysore - animysore@gatech.edu  
+Aaditya Singh - asingh@gatech.edu  
+
+> Georgia Institute of Technology
+
+## Steps to run
 
 1. Create a virtual environment using venv in the repo directory
     python -m venv sysmlvenv/
